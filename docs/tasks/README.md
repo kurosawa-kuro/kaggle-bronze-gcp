@@ -46,12 +46,18 @@
 
 ## Active
 
+ROGII 実戦（entry 締切 2026-07-29）に向けた P0 系列。出典は [idea/2026-07-06_bronze-strategy-review.md](idea/2026-07-06_bronze-strategy-review.md)。実装順: P0-0 → P0-1 → P0-2 →（P0-3 は並行可）→ P0-4。
+
 | ファイル | 用途 |
 |---|---|
-| [done/vertex-ready-runner.md](done/vertex-ready-runner.md) | ✅ Vertex-ready 実験ランナーの実装（ADR 0001、現行方針は ADR 0002） |
-| [done/hpo-leverage-phase1.md](done/hpo-leverage-phase1.md) | ✅ GCP レバレッジ Phase1（seed平均 / sweep / Optuna / Vertex HP Tuning） |
-| [done/cost-tracking-bigquery.md](done/cost-tracking-bigquery.md) | ✅ GCP コスト可視化を BigQuery に統一（予算アラート + 概算ロガー + Discord） |
+| [active/2026-07-06-p0-0-rogii-rules-check.md](active/2026-07-06-p0-0-rogii-rules-check.md) | ROGII ルール・提出形式・指標・group 構造の事前確認（コード0行、最優先） |
+| [active/2026-07-06-p0-1-cv-strategy-config.md](active/2026-07-06-p0-1-cv-strategy-config.md) | CV strategy の config 駆動化（GroupKFold + fold overlap 検査） |
+| [active/2026-07-06-p0-2-package-kernel.md](active/2026-07-06-p0-2-package-kernel.md) | code comp 用 package-kernel 経路（前処理状態の永続化を含む。P0-0 完了が着手条件） |
+| [active/2026-07-06-p0-3-submissions-ledger.md](active/2026-07-06-p0-3-submissions-ledger.md) | BQ `submissions` 提出台帳 + `make lb-sync`（他タスクと並行可） |
+| [active/2026-07-06-p0-4-multimodel-blend.md](active/2026-07-06-p0-4-multimodel-blend.md) | CatBoost/XGBoost 統合 + OOF blend ops（P0-1 が前提） |
 | [active/refactoring-candidates.md](active/refactoring-candidates.md) | 残りのクリーンアップ候補 |
+
+完了済み: [done/vertex-ready-runner.md](done/vertex-ready-runner.md) / [done/hpo-leverage-phase1.md](done/hpo-leverage-phase1.md) / [done/cost-tracking-bigquery.md](done/cost-tracking-bigquery.md)
 
 ## ルール
 
