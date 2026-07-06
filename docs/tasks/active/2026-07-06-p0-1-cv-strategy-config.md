@@ -8,7 +8,8 @@
 
 - 出典: [2026-07-06 銅メダル戦略レビュー](../idea/2026-07-06_bronze-strategy-review.md) P0-1（ランキング1位）。
 - 現状は `src/models/lgbm.py:_splits()` が objective ベースで shuffle KFold / StratifiedKFold を固定選択する。ROGII（well 単位の空間データ）でこのままだと、リークした CV スコアを信じて private LB で崩れる。
-- 前提タスク: [P0-0](2026-07-06-p0-0-rogii-rules-check.md) で group_col 候補を確定してから ROGII 用 config を書く（実装自体は P0-0 完了前に着手可）。
+- 前提タスク: [P0-A](2026-07-06-p0-a-config-single-source.md)（config 正本の止血。同じ train.py / models を触るため先行必須）。[P0-0](2026-07-06-p0-0-rogii-rules-check.md) で group_col 候補を確定してから ROGII 用 config を書く（実装自体は P0-0 完了前に着手可）。
+- 実装方針の追記（2026-07-06 再調査反映）: `_splits` は lgbm.py 内の拡張ではなく、**新設 `src/pipelines/splits.py` に一本化**する。catboost_.py:65-68 に同一ロジックの重複実装があり、lgbm 側だけ直すと P0-4 で再手術になるため。
 
 ## Scope
 

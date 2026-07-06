@@ -1,5 +1,9 @@
 # 複数 Kaggle コンペを低コストで切り替えるアーキテクチャ調査
 
+> **2026-07-06 追記**: 本調査の主張はコードで再検証済み。検証結果・修正済みの優先順位・実装計画は
+> [idea/2026-07-06_multi-competition-architecture-review.md](../idea/2026-07-06_multi-competition-architecture-review.md) を正とする
+> （事実認定はほぼ正確。CompetitionPlugin 全面化・cache hash 化は過剰と判定し、Vertex 経路の config 無視バグ・metric 方向3重複・BQ JOIN 衝突を追加検出）。
+
 ## Goal
 
 このプロジェクトを特定の Kaggle コンペ専用ではなく、ブロンズ取得まで複数コンペへ素早く乗り換えられる実験基盤にする。

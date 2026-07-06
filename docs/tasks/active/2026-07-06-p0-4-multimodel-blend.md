@@ -8,7 +8,8 @@
 
 - 出典: [2026-07-06 銅メダル戦略レビュー](../idea/2026-07-06_bronze-strategy-review.md) P0-3。
 - 現状 `train.py:176-177` が `model.name != lgbm` を明示 reject。`src/models/catboost_.py` / `xgboost_.py` は train_cv 実装済みだが正規経路（成果物契約・Vertex 投入・BQ 記録）に未接続。oof.parquet と `fold_manifest.json` の `valid_index_sha256` は全 run に既にあり、blend の安全機構として流用できる。
-- 前提タスク: [P0-1](2026-07-06-p0-1-cv-strategy-config.md)（全モデルが同じ `_splits` を通ることが blend 整合の前提）。P0-2/P0-3 とは独立。
+- 前提タスク: [P0-A](2026-07-06-p0-a-config-single-source.md) と [P0-1](2026-07-06-p0-1-cv-strategy-config.md)（全モデルが同じ splits を通ることが blend 整合の前提）。P0-2/P0-3 とは独立。
+- コスト再見積もり（2026-07-06 再調査反映）: catboost_.py:1 の docstring「lgbm.py と同じシグネチャ」は**嘘**。実際は `(X, y, params, notes)` のみで n_folds / seed / max_folds / log_run_id を受けず、独自 `_splits` と独自 `_log` を持つ。シグネチャ統一を含むため実装コストは 2〜3日と見る。
 
 ## Scope
 

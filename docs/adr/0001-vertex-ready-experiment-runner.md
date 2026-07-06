@@ -78,6 +78,6 @@ submit.py       = submission 整形・提出
 
 - `01_requirements.md`: 非対象から Vertex を外し、制約付き対象へ移す。
 - `02_architecture.md`: 「実行モデル（Vertex-ready 実験契約）」を追加する。
-- 実装は `docs/tasks/done/vertex-ready-runner.md` で完了済み。
+- 実装内容は `docs/01_requirements.md` / `docs/02_architecture.md` / `docs/04_workflows.md` に昇格済み。
 - ADR 0002 により、Endpoint / Model Registry / Pipelines / Batch Prediction は採用へ反転した。
 - 引き続き持ち込まないもの: Port/Adapter の多層化、DI container、ブロンズ目的に不要な常駐基盤。
