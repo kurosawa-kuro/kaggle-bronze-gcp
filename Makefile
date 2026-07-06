@@ -1,4 +1,4 @@
-.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy stage-data cost cost-record cost-notify sweep tune hp-tune
+.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
 
 VENV   := .venv
 PYTHON := $(VENV)/bin/python
@@ -11,9 +11,10 @@ CONFIG ?= configs/lgbm_baseline.yaml
 RUN_ID ?= $(shell date -u +%Y%m%d_%H%M%S)
 PROJECT_CONFIG ?= env/project.yaml
 GCP_PROJECT ?= $(shell $(PYTHON) -c 'import yaml; c=yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}; print(c.get("gcpProject") or c.get("gcp", {}).get("project") or "")' 2>/dev/null)
+GOOGLE_CLOUD_QUOTA_PROJECT ?= $(GCP_PROJECT)
 REGION ?= $(shell $(PYTHON) -c 'import yaml; c=yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}; print(c.get("gcpRegion") or c.get("gcp", {}).get("region") or "us-central1")' 2>/dev/null)
 AR_REPO ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("artifactRegistryRepo") or "kaggle")' 2>/dev/null)
-IMAGE_NAME ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("imageName") or "kaggle-bronze-challenge")' 2>/dev/null)
+IMAGE_NAME ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("imageName") or "kaggle-bronze-gcp")' 2>/dev/null)
 IMAGE_TAG ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("imageTag") or "latest")' 2>/dev/null)
 GCS_BUCKET ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("gcsBucket") or "")' 2>/dev/null)
 COMP_DATA ?= $(shell $(PYTHON) -c 'import yaml; c=yaml.safe_load(open("env/config.yaml")) or {}; print(c.get("comp") or c.get("data", {}).get("comp") or "")' 2>/dev/null)
@@ -45,11 +46,16 @@ build-push:
 	gcloud auth configure-docker $(REGION)-docker.pkg.dev --quiet
 	docker buildx build --platform linux/amd64 -f infra/Dockerfile -t $(IMAGE) --push .
 
-# Create the minimal GCP resources used by build-push/train-vertex/collect.
+# Terraform is the source of truth for GCP resources.
+terraform-init:
+	GOOGLE_CLOUD_QUOTA_PROJECT=$(GOOGLE_CLOUD_QUOTA_PROJECT) terraform -chdir=infra/terraform init
+
+terraform-plan:
+	GOOGLE_CLOUD_QUOTA_PROJECT=$(GOOGLE_CLOUD_QUOTA_PROJECT) terraform -chdir=infra/terraform plan
+
+# Legacy wrapper: keep the old command discoverable, but manage resources via Terraform.
 gcp-bootstrap:
-	gcloud services enable aiplatform.googleapis.com artifactregistry.googleapis.com storage.googleapis.com --project $(GCP_PROJECT)
-	gcloud artifacts repositories describe $(AR_REPO) --location=$(REGION) --project=$(GCP_PROJECT) >/dev/null 2>&1 || gcloud artifacts repositories create $(AR_REPO) --repository-format=docker --location=$(REGION) --project=$(GCP_PROJECT)
-	gcloud storage buckets describe gs://$(GCS_BUCKET) >/dev/null 2>&1 || gcloud storage buckets create gs://$(GCS_BUCKET) --project=$(GCP_PROJECT) --location=$(REGION) --uniform-bucket-level-access
+	@echo "GCP bootstrap is now Terraform-managed. Run: make terraform-init && make terraform-plan"
 
 # Stage local raw data to GCS so the Vertex container can fetch it (train.py --input-uri)
 stage-data:
@@ -114,6 +120,10 @@ cost-record:
 # Show month-to-date estimated GCP cost vs ¥1000/¥5000 thresholds
 cost:
 	$(PYRUN) runner.ops.costs report --config $(CONFIG)
+
+# Compare experiments and cost estimates from BigQuery
+compare:
+	$(PYRUN) runner.ops.compare --project-config $(PROJECT_CONFIG) $(if $(COMP),--competition $(COMP),) $(if $(RUN_LIKE),--run-like "$(RUN_LIKE)",) $(if $(LIMIT),--limit $(LIMIT),)
 
 # Push the month-to-date cost summary to Discord (webhook in env/secret.yaml)
 cost-notify:

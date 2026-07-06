@@ -14,6 +14,7 @@ configs/
 infra/
   Dockerfile              # Vertex 用学習 image
   Dockerfile.serving      # Vertex 推論コンテナ（Batch Prediction / Endpoint 用）
+  terraform/              # GCP 基盤 IaC（GCS / Artifact Registry / BQ / SA / IAM / Budget）
 scripts/
   init_competition.py
 src/
@@ -34,6 +35,7 @@ src/
       deploy.py           # Vertex Endpoint deploy/teardown（⚠️常駐コスト）
     ops/                  # 周辺運用
       collect.py          # GCS run_id 成果物を local に回収
+      compare.py          # BigQuery experiments / cost_estimates を比較
       submit.py           # run_id の submission.csv を Kaggle 提出
       costs.py            # Vertex job 概算コストを BigQuery に記録
   serving/
@@ -51,7 +53,7 @@ src/
   features/
   utils/
     artifact_store.py     # GCS directory upload/download
-    bq.py                 # bq CLI helper
+    bq.py                 # google-cloud-bigquery helper
     logger.py             # BigQuery experiments logger
 notebooks/
 data/                     # gitignore
@@ -59,7 +61,7 @@ outputs/runs/<comp>/<run_id>/  # gitignore
 ```
 
 エントリポイントは `src/runner/` に集約する。Makefile の `PYRUN` は `PYTHONPATH=src .venv/bin/python -m runner.<name>` を使う。  
-外部 CLI（`gcloud`, `bq`, `kaggle`）には `PYTHONPATH=src` を渡さない。`src/utils` が CLI 側の `utils` import を shadow して壊すため、`utils.bq.clean_env()` や `runner.ops.submit` で環境変数を除去する。
+外部 CLI（`gcloud`, `kaggle`）には `PYTHONPATH=src` を渡さない。`src/utils` が CLI 側の `utils` import を shadow して壊すため、`utils.bq.clean_env()` や `runner.ops.submit` で環境変数を除去する。BigQuery は CLI ではなく `google-cloud-bigquery` Python client 経由で扱う。
 
 ## 実行モデル
 
@@ -74,6 +76,7 @@ src/runner/train.py
   ├─ pipelines.ingest / featurize
   ├─ models.lgbm.train_cv
   ├─ seed 平均
+  ├─ dataset_snapshot / fold_manifest / leakage_audit 生成
   ├─ run_id 成果物生成
   ├─ BigQuery experiments log
   └─ optional GCS upload（--output-uri）
@@ -130,6 +133,7 @@ models.lgbm.train_cv()
 | `src/runner/experiment/tune.py` | Optuna による単一マシン HPO。`best_params.json`, `best_config.yaml`, `trials.csv` を生成 |
 | `src/runner/experiment/hp_tune.py` | Vertex Hyperparameter Tuning（Vizier）を投入 |
 | `src/runner/ops/costs.py` | Vertex Custom Job の start/end と machine type から概算コストを BigQuery に記録 |
+| `src/runner/ops/compare.py` | BigQuery `experiments` と `cost_estimates` を run_id で比較 |
 | `src/runner/model/register.py` | `gs://<bucket>/runs/<comp>/<run_id>/model` を Vertex Model Registry に登録。`kaggle-<comp>` に版を積む（`latest` alias）。`--serving-image` で Batch / Endpoint 用の serving 付き登録も行う |
 | `src/runner/model/pipeline.py` | Vertex Pipelines (KFP v2)。既存イメージを container component にして `train` → `register` の DAG を compile + 投入。`--dry-run` で compile のみ |
 | `src/runner/model/batch_predict.py` | 登録モデル（`--serving-image` 付き）に対し Vertex Batch Prediction を投入。`--dry-run` で plan のみ |
@@ -139,7 +143,7 @@ models.lgbm.train_cv()
 | `src/serving/predictor.py` | 推論コンテナ本体。`model/`(booster+manifest) を読み全 booster 平均を返す。stdlib HTTP で `/health` `/predict` を提供（新 infra lib なし） |
 | `src/utils/logger.py` | CV 結果を BigQuery `<bqDataset>.experiments` に記録。失敗しても学習は止めない |
 | `src/utils/artifact_store.py` | GCS prefix と local directory の 1:1 upload/download |
-| `src/utils/bq.py` | `bq` CLI 経由の最小 BigQuery helper |
+| `src/utils/bq.py` | `google-cloud-bigquery` Python client 経由の最小 BigQuery helper |
 
 ## run_id 成果物契約
 
@@ -152,6 +156,9 @@ outputs/runs/<competition>/<run_id>/
   oof.parquet
   test_pred.parquet
   feature_importance.csv
+  dataset_snapshot.json
+  fold_manifest.json
+  leakage_audit.json
   submission.csv
   log.txt
   model/
@@ -179,6 +186,7 @@ Vertex 実行時は `gs://<bucket>/runs/<competition>/<run_id>/` に同じ内容
 
 ## GCP 境界
 
+- Terraform: GCP 基盤の正本（API enable / GCS / Artifact Registry / BigQuery dataset & tables / Vertex SA / IAM / Budget）
 - GCS: raw data staging と run_id artifact storage
 - Artifact Registry: 学習 image
 - Vertex Custom Job: full training / sweep jobs

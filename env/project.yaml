@@ -3,8 +3,8 @@
 # Edit this file after moving or renaming the project, then run:
 #   make render-project-config
 
-projectName: kaggle-bronze-challenge
-repoRoot: /home/ubuntu/repos/kaggle-bronze-challenge
+projectName: kaggle-bronze-gcp
+repoRoot: /home/ubuntu/repos/kaggle-bronze-gcp
 workspaceRoot: /home/ubuntu/repos
 homeDir: /home/ubuntu
 
@@ -18,7 +18,7 @@ gcpProject: mlops-dev-a
 gcpAccount: kurokawa81toshifumi@gmail.com
 gcpRegion: us-central1
 artifactRegistryRepo: kaggle
-imageName: kaggle-bronze-challenge
+imageName: kaggle-bronze-gcp
 imageTag: latest
 # Optional override. If empty, scripts derive:
 # {gcpRegion}-docker.pkg.dev/{gcpProject}/{artifactRegistryRepo}/{imageName}:{imageTag}
@@ -30,4 +30,4 @@ jpyPerUsd: 150
 # full run 向け（8物理コア, ローカル i7-8700 超）。smoke/EDA はローカルで回す。
 # per-run を更に速くするなら c2-standard-16（高クロック）。GPU は bronze では不要。
 vertexMachineType: n2-standard-16
-vertexServiceAccount:
+vertexServiceAccount: kaggle-bronze-vertex@mlops-dev-a.iam.gserviceaccount.com

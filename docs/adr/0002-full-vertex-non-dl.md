@@ -29,16 +29,17 @@ Feature Store を「常駐コスト・運用増だけで実験スループット
 - **Vertex AI Batch Prediction**（バッチ推論）← 実装済み（`infra/Dockerfile.serving` + `src/serving/predictor.py` の推論コンテナ、`src/runner/model/batch_predict.py` / `make batch-predict`。推論器はローカル Docker 実証済み、実 job は serving image push 前提。`make register-servable` で実 serving 付き登録）
 - Endpoint / Model Monitoring（配信・監視。⚠️常駐コスト系。下記コスト方針で監視し、邪魔なら最初に削る）← Endpoint は **deploy/teardown コードのみ実装**（`src/runner/model/deploy.py` / `make endpoint-deploy`・`endpoint-teardown`、dry-run 検証済み）。常駐コストのため実デプロイは手動・任意。Monitoring は稼働 Endpoint 前提のため未実装
 
-### 2. データ/メタデータの正本は BigQuery に統一（infra lib 最小化）
+### 2. データ/メタデータの正本は BigQuery に統一（Vertex 内で動く Python client）
 
 tabular なメタデータ（実験 run・HP trial・sweep 結果・コスト）は **すべて BigQuery
 （`kaggle_ops` データセット）に統一**する。理由:
 
-- `costs.py` は既に `bq` CLI サブプロセスで BQ に書いており、**新しい Python infra lib を足さずに**
-  実験記録を BQ に寄せられる（`google-cloud-bigquery` すら不要）。
+- `bq` CLI 依存は Vertex 学習コンテナ（python:3.12-slim）内で成立しないため廃止する。
+- BigQuery アクセスは `google-cloud-bigquery` Python client に統一し、ローカルは ADC、Vertex は attached
+  Service Account で認証する。
 - 既存 `cost_estimates` テーブルが `run_id` 列を持つため、実験スコアとコストを `run_id` で JOIN できる。
 - このため **Vertex AI Experiments / ML Metadata は実験トラッキングの正本としては採用しない**。
-  BQ がトラッキングを兼ね、costs と JOIN でき、infra を増やさないため（フル Vertex 方針への例外ではなく、
+  BQ がトラッキングを兼ね、costs と JOIN できるため（フル Vertex 方針への例外ではなく、
   「BQ 統一」の帰結）。Pipelines を導入し Experiments への自動記録が出た場合は、必要なら BQ への
   小さな exporter を足す。
 

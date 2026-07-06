@@ -1,4 +1,4 @@
-# kaggle-bronze-challenge
+# kaggle-bronze-gcp
 
 Kaggle 表形式コンペでブロンズメダル圏を安定して狙うための、LightGBM 主軸・GCP/Vertex AI 活用型の実験基盤。
 
@@ -27,10 +27,11 @@ make setup
 make smoke CONFIG=configs/lgbm_baseline.yaml RUN_ID=smoke_check
 ```
 
-GCP 経路を使う前に `env/project.yaml` の project / region / bucket / Artifact Registry repo / BigQuery dataset を確認する。
+GCP 経路を使う前に `env/project.yaml` の project / region / bucket / Artifact Registry repo / BigQuery dataset を確認し、Terraform plan を見る。
 
 ```bash
-make gcp-bootstrap
+make terraform-init
+make terraform-plan
 make stage-data
 make build-push
 ```
@@ -59,6 +60,7 @@ make collect CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm
 make logs
 make cost-record CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm
 make cost
+make compare
 ```
 
 提出:
@@ -79,8 +81,9 @@ make submit CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm MSG="exp001 lgb
 | Vertex Pipelines | 実装済み（compile / submit 経路） |
 | Vertex Batch Prediction | 実装済み（serving image 前提） |
 | Vertex Endpoint | deploy / teardown コード実装済み。常駐コストのため手動・任意 |
-| BigQuery 実験ログ / コストログ | 実装済み |
-| Terraform / Cloud Build / GitHub Actions | 未導入。現状は Makefile + gcloud + Vertex SDK が正規運用 |
+| BigQuery 実験ログ / コストログ | 実装済み（google-cloud-bigquery Python client） |
+| Terraform | 導入済み。GCS / Artifact Registry / BigQuery / Vertex SA / IAM / Budget を管理 |
+| Cloud Build / GitHub Actions | 未導入。ローカル Makefile から投入 |
 
 ## ディレクトリ構成
 
@@ -93,11 +96,12 @@ env/
 infra/
   Dockerfile              # Vertex 学習コンテナ
   Dockerfile.serving      # Vertex Batch / Endpoint 推論コンテナ
+  terraform/              # GCP 基盤 IaC
 src/
   runner/
     experiment/           # train / vertex_run / sweep / tune / hp_tune
     model/                # register / pipeline / batch_predict / deploy
-    ops/                  # collect / submit / costs
+    ops/                  # collect / submit / costs / compare
   pipelines/              # ingest / featurize / evaluate / score
   models/                 # lgbm / catboost / xgboost / ensemble
   serving/                # Vertex 推論コンテナ本体

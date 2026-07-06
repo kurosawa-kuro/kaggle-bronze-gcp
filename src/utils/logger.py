@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from config import COMP, METRIC
 from utils import bq
@@ -28,7 +29,7 @@ def _ensure(project: str, dataset: str) -> None:
     global _ensured
     if _ensured:
         return
-    bq.query(project, f"""
+    bq.execute(project, f"""
         CREATE TABLE IF NOT EXISTS {_table(dataset)} (
             run_id      STRING,
             recorded_at TIMESTAMP,
@@ -61,9 +62,33 @@ def log_run(run_id: str, cv_score: float, params: dict, notes: str = "") -> None
             "source": "cv",
         }, _TS_COLS)
         print(f"[logger] BQ {_table(dataset)} <- run_id={run_id}  cv_score={cv_score:.5f}")
-    except SystemExit as exc:
-        # 記録失敗で学習本体は止めない（costs.py の Discord 失敗握りつぶしと同思想）
-        print(f"[logger] WARN: BQ 記録失敗 run_id={run_id}: {exc}")
+    except Exception as exc:  # noqa: BLE001 - 記録失敗で学習本体は止めない
+        message = f"[logger] WARN: BQ 記録失敗 run_id={run_id}: {type(exc).__name__}: {exc}"
+        print(message)
+        _write_warning_artifact(run_id, message)
+
+
+def _write_warning_artifact(run_id: str, message: str) -> None:
+    run_dir = _warning_run_dir(run_id)
+    if run_dir is None:
+        return
+    warning_dir = run_dir / "warnings"
+    warning_dir.mkdir(parents=True, exist_ok=True)
+    (warning_dir / "bq_logger_warning.txt").write_text(message + "\n", encoding="utf-8")
+
+
+def _warning_run_dir(run_id: str) -> Path | None:
+    root = Path("outputs/runs") / COMP
+    candidates = [run_id]
+    for marker in ("_s", "_t"):
+        prefix, sep, suffix = run_id.rpartition(marker)
+        if sep and suffix.isdigit():
+            candidates.append(prefix)
+    for candidate in candidates:
+        run_dir = root / candidate
+        if run_dir.exists():
+            return run_dir
+    return None
 
 
 def show_runs(limit: int = 10) -> None:

@@ -20,7 +20,8 @@ make init COMP=<slug>             # 新コンペ初期化（download→正規化
 make run                          # 現在の実験を実行 (run.py)
 make smoke CONFIG=<path>           # train.py --config の短時間確認
 make train-local CONFIG=<path> RUN_ID=<id>   # outputs/runs/<comp>/<run_id>/ に成果物生成
-make gcp-bootstrap                 # 最小 GCP API / Artifact Registry repo / GCS bucket を作成
+make terraform-init && make terraform-plan # GCP 基盤の確認（Terraform 管理）
+make gcp-bootstrap                 # 互換 wrapper。Terraform への案内のみ
 make build-push                    # 学習 image を Artifact Registry へ push
 make stage-data                    # data/<comp>/raw を GCS へ上げる（Vertex 投入の前提）
 make train-vertex CONFIG=<path> RUN_ID=<id>  # Vertex Custom Job へ投入（n2-standard-16 + Spot 既定。on-demand は SPOT=）
@@ -38,6 +39,7 @@ make endpoint-teardown CONFIG=<path> [DRY=--dry-run] # Endpoint を undeploy+削
 make cost-record CONFIG=<path> RUN_ID=<id>  # 完了ジョブの概算コストを BigQuery に記録
 make cost                          # 当月の概算コスト累計を表示（¥1000/¥5000 しきい値）
 make cost-notify                   # 当月概算サマリを Discord へ送信（webhook は conf/secret.yaml）
+make compare                       # BigQuery experiments/cost_estimates を比較
 make submit CONFIG=<path> RUN_ID=<id> MSG=<msg> # run_id 成果物を Kaggle へ提出
 make submit-legacy COMP=<slug> MSG=<msg> # root の submission.csv を Kaggle へ提出
 make nb NB=<名前>                 # 特定のノートブックを実行 (notebooks/<名前>.py)
@@ -69,6 +71,6 @@ Claude Code 公式の基本ワークフローに従う（出典: code.claude.com
 - `make run` が通ることが最低品質ゲート。
 - Vertex-ready runner を触る場合は `make smoke CONFIG=configs/lgbm_baseline.yaml` も確認する。
 - 非DL/GPU の Vertex/GCP マネージド機能はフル活用する（ADR 0002）。Model Registry / Pipelines / Batch Prediction / Endpoint 等を採用し、邪魔・無駄と分かったら後で削る。
-- tabular メタデータ（実験 run / HP trial / sweep / cost）の正本は **BigQuery `kaggle_ops` に統一**。新しい infra lib を足さない（`bq` CLI 経由）。モデル等 blob は GCS、学習投入は aiplatform SDK。
+- tabular メタデータ（実験 run / HP trial / sweep / cost）の正本は **BigQuery `kaggle_ops` に統一**。Vertex コンテナ内でも動くよう `google-cloud-bigquery` Python client 経由にする。モデル等 blob は GCS、学習投入は aiplatform SDK。
 - 過度な Port/Adapter 多層化は持ち込まない。速く回すことを優先する。
 - LLM / RAG / Deep Learning / GPU の提案はしない。LightGBM 主軸で解く。

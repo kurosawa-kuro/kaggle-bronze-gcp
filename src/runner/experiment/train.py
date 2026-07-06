@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import shutil
@@ -187,6 +188,9 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
 
     train_df, test_df = load_data()
     X_train, y_train, X_test = make_features(train_df, test_df)
+    _write_dataset_snapshot(run_dir / "dataset_snapshot.json", train_df, test_df, cfg)
+    _write_fold_manifest(run_dir / "fold_manifest.json", X_train, y_train, cfg, n_folds=n_folds, seeds=seeds, max_folds=max_folds)
+    _write_leakage_audit(run_dir / "leakage_audit.json", train_df, test_df, X_train, X_test, cfg)
 
     # seed ごとに CV 学習し、oof / test 予測を seed 横断で平均（seed bagging）
     oof_per_seed: list[np.ndarray] = []
@@ -289,6 +293,23 @@ def _write_dummy_artifacts(run_dir: Path, cfg: dict[str, Any], run_id: str, comp
     pd.DataFrame({"row_id": [0], "prediction": [0.0]}).to_parquet(run_dir / "test_pred.parquet", index=False)
     pd.DataFrame({"feature": [], "importance": []}).to_csv(run_dir / "feature_importance.csv", index=False)
     pd.DataFrame({"id": [0], "target": [0.0]}).to_csv(run_dir / "submission.csv", index=False)
+    _write_json(run_dir / "dataset_snapshot.json", {
+        "run_id": run_id,
+        "competition": competition,
+        "dry_run": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    _write_json(run_dir / "fold_manifest.json", {
+        "run_id": run_id,
+        "dry_run": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    _write_json(run_dir / "leakage_audit.json", {
+        "run_id": run_id,
+        "status": "skipped",
+        "dry_run": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
     print("[train] dry-run artifacts written")
 
 
@@ -318,6 +339,97 @@ def _write_predictions(path: Path, preds: np.ndarray) -> None:
     df.to_parquet(path, index=False)
 
 
+def _write_dataset_snapshot(path: Path, train_df: pd.DataFrame, test_df: pd.DataFrame, cfg: dict[str, Any]) -> None:
+    data_cfg = cfg.get("data", cfg)
+    snapshot = {
+        "competition": data_cfg.get("comp"),
+        "metric": data_cfg.get("metric"),
+        "objective": data_cfg.get("objective"),
+        "train_rows": int(len(train_df)),
+        "test_rows": int(len(test_df)),
+        "train_columns": list(map(str, train_df.columns)),
+        "test_columns": list(map(str, test_df.columns)),
+        "train_schema_hash": _schema_hash(train_df),
+        "test_schema_hash": _schema_hash(test_df),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _write_json(path, snapshot)
+
+
+def _write_fold_manifest(
+    path: Path,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    cfg: dict[str, Any],
+    *,
+    n_folds: int,
+    seeds: list[int],
+    max_folds: int | None,
+) -> None:
+    from sklearn.model_selection import KFold, StratifiedKFold
+
+    data_cfg = cfg.get("data", cfg)
+    objective = data_cfg.get("objective", "regression")
+    folds: list[dict[str, Any]] = []
+    for seed in seeds:
+        splitter = (
+            KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+            if objective == "regression"
+            else StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+        )
+        splits = list(splitter.split(X_train, y_train))
+        if max_folds is not None:
+            splits = splits[:max_folds]
+        for fold, (train_idx, valid_idx) in enumerate(splits):
+            folds.append({
+                "seed": seed,
+                "fold": fold,
+                "train_rows": int(len(train_idx)),
+                "valid_rows": int(len(valid_idx)),
+                "valid_index_sha256": _index_hash(y_train.index[valid_idx]),
+            })
+    _write_json(path, {
+        "competition": data_cfg.get("comp"),
+        "objective": objective,
+        "n_folds_requested": n_folds,
+        "n_folds_materialized": int(max_folds or n_folds),
+        "seeds": seeds,
+        "folds": folds,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+def _write_leakage_audit(
+    path: Path,
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    cfg: dict[str, Any],
+) -> None:
+    data_cfg = cfg.get("data", cfg)
+    target = data_cfg.get("target", "target")
+    train_only_raw = sorted(set(map(str, train_df.columns)) - set(map(str, test_df.columns)) - {str(target)})
+    feature_only_train = sorted(set(map(str, X_train.columns)) - set(map(str, X_test.columns)))
+    feature_only_test = sorted(set(map(str, X_test.columns)) - set(map(str, X_train.columns)))
+    warnings = []
+    if str(target) in set(map(str, X_train.columns)):
+        warnings.append("target column is present in X_train features")
+    if feature_only_train or feature_only_test:
+        warnings.append("train/test feature columns differ")
+    _write_json(path, {
+        "competition": data_cfg.get("comp"),
+        "target": target,
+        "status": "warning" if warnings else "pass",
+        "warnings": warnings,
+        "train_only_raw_columns_except_target": train_only_raw,
+        "feature_only_train_columns": feature_only_train,
+        "feature_only_test_columns": feature_only_test,
+        "feature_schema_hash": _schema_hash(X_train),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
 def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any]) -> None:
     """学習済み booster を保存（Vertex Model Registry 登録 = runner.model.register の成果物）。
 
@@ -342,6 +454,20 @@ def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any]) -
     (model_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[train] saved {len(saved)} boosters -> {model_dir}")
+
+
+def _schema_hash(df: pd.DataFrame) -> str:
+    payload = json.dumps([(str(col), str(dtype)) for col, dtype in df.dtypes.items()], ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _index_hash(index: pd.Index) -> str:
+    payload = "\n".join(map(str, index.to_list()))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _write_feature_importance(path: Path, models: list[Any], feature_names: pd.Index) -> None:

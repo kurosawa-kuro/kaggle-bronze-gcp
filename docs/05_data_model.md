@@ -77,14 +77,14 @@ gcp:
 gcpProject: mlops-dev-a
 gcpRegion: us-central1
 artifactRegistryRepo: kaggle
-imageName: kaggle-bronze-challenge
+imageName: kaggle-bronze-gcp
 imageTag: latest
 imageUri:
 gcsBucket: mlops-dev-a-kaggle-bronze-runs
 bqDataset: kaggle_ops
 jpyPerUsd: 150
 vertexMachineType: n2-standard-16
-vertexServiceAccount:
+vertexServiceAccount: kaggle-bronze-vertex@mlops-dev-a.iam.gserviceaccount.com
 ```
 
 `imageUri` が空なら `{region}-docker.pkg.dev/{project}/{repo}/{imageName}:{imageTag}` を runner が組み立てる。
@@ -113,6 +113,9 @@ outputs/runs/<competition>/<run_id>/
   oof.parquet
   test_pred.parquet
   feature_importance.csv
+  dataset_snapshot.json
+  fold_manifest.json
+  leakage_audit.json
   submission.csv
   log.txt
   model/booster_NNN.txt   # seed×fold の全 booster
@@ -150,7 +153,8 @@ gs://<bucket>/runs/<competition>/<run_id>/
 ## BigQuery: experiments
 
 Dataset は `env/project.yaml` の `bqDataset`（既定 `kaggle_ops`）。  
-`src/utils/logger.py` が `CREATE TABLE IF NOT EXISTS` を実行する。ただし dataset 自体は事前に存在している必要がある。
+Terraform の `infra/terraform/` が dataset / table を管理する。`src/utils/logger.py` も後方互換として
+`CREATE TABLE IF NOT EXISTS` を実行するが、正本は Terraform。
 
 ```sql
 CREATE TABLE IF NOT EXISTS kaggle_ops.experiments (
@@ -169,7 +173,7 @@ CREATE TABLE IF NOT EXISTS kaggle_ops.experiments (
 
 ## BigQuery: cost_estimates
 
-`src/runner/costs.py` は現状 `kaggle_ops.cost_estimates` を使う。
+`src/runner/ops/costs.py` は現状 `kaggle_ops.cost_estimates` を使う。table schema は Terraform 管理。
 
 主要カラム:
 
@@ -220,4 +224,5 @@ Git 管理する:
 - `docs/`
 - `src/`
 - `infra/Dockerfile`
+- `infra/terraform/`
 - `env/project.yaml`

@@ -164,3 +164,58 @@ bq query --use_legacy_sql=false \
 - **Feature Store 方針**: Vertex AI Feature Store（製品）は採用しない。オンライン serving が無い Kaggle 用途では、効くのは製品ではなく feature registry / lineage / point-in-time な snapshot / fold-aware transform であり、これらは BigQuery + GCS で軽く実装する。必要が生じたら（オンライン推論が要件になったら）採用を再検討する。
 - heavy training / sweep / HPO / seed averaging は実装済みのため本タスクの作業項目ではない。Context の「実装済みの前提」を棚卸し（Plan step 1）の起点にする。
 - 2026-07-06 レビュー反映: Terraform import 手順の明記、ADR 0002 改訂の必須化、logger の未捕捉例外（FileNotFoundError）による訓練クラッシュリスクの明記、Feature Store 不採用方針の追記。
+
+## Completion
+
+完了日: 2026-07-06
+
+実装結果:
+
+- `infra/terraform/` を追加し、既存 GCS bucket / Artifact Registry repo / BigQuery dataset / BigQuery tables を import 済み。
+- Terraform で API enable / GCS / Artifact Registry / BigQuery dataset・tables / Vertex 実行 Service Account / IAM / Billing Budget を管理。
+- Vertex 実行 Service Account は `kaggle-bronze-vertex@mlops-dev-a.iam.gserviceaccount.com`。
+- Billing Budget は請求アカウント通貨に合わせて JPY 5,000 の月次 guardrail とした。
+- `bq` CLI 依存を廃止し、`google-cloud-bigquery` Python client 経由に変更。
+- `make compare` を追加し、`experiments` と `cost_estimates` を `run_id` で比較可能にした。
+- `dataset_snapshot.json` / `fold_manifest.json` / `leakage_audit.json` を run_id 成果物へ追加。
+- 学習イメージ `us-central1-docker.pkg.dev/mlops-dev-a/kaggle/kaggle-bronze-gcp:latest` を build/push 済み。
+- ADR 0002 / CLAUDE.md / README / docs 本体を同時更新し、GCP/Vertex を「ローカル指揮所 + GCP 加速装置」として記述。
+
+検証結果:
+
+```bash
+GOOGLE_CLOUD_QUOTA_PROJECT=mlops-dev-a terraform -chdir=infra/terraform plan -input=false
+# => No changes
+
+make smoke CONFIG=configs/lgbm_baseline.yaml RUN_ID=codex_smoke_gcp
+# => local smoke 成功、BigQuery experiments への記録成功
+
+make stage-data
+# => raw data を GCS へ upload 成功
+
+make build-push
+# => kaggle-bronze-gcp:latest を Artifact Registry へ push 成功
+
+PYTHONPATH=src .venv/bin/python -m runner.experiment.vertex_run \
+  --config configs/lgbm_baseline.yaml \
+  --run-id vertex_bq_check_final \
+  --image-uri us-central1-docker.pkg.dev/mlops-dev-a/kaggle/kaggle-bronze-gcp:latest \
+  --machine-type n1-standard-4 \
+  --service-account kaggle-bronze-vertex@mlops-dev-a.iam.gserviceaccount.com \
+  --smoke --sync
+# => JOB_STATE_SUCCEEDED
+# => Vertex 内ログ: [logger] BQ kaggle_ops.experiments <- run_id=vertex_bq_check_final
+
+make collect CONFIG=configs/lgbm_baseline.yaml RUN_ID=vertex_bq_check_final
+# => 12 files downloaded
+
+make cost-record CONFIG=configs/lgbm_baseline.yaml RUN_ID=vertex_bq_check_final
+# => n1-standard-4 62s ≈ $0.003272 (¥0.49)
+
+make compare RUN_LIKE='vertex_bq_check_final%' LIMIT=10
+# => cv_score と est_jpy/cost_rows の JOIN を確認
+```
+
+残作業:
+
+- なし。

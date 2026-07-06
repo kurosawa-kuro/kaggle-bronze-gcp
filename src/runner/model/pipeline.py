@@ -143,7 +143,7 @@ def _load_yaml(path: Path) -> dict:
 
 def _image_uri(project_cfg: dict, *, project: str, region: str) -> str:
     repo = project_cfg.get("artifactRegistryRepo", "kaggle")
-    image_name = project_cfg.get("imageName", "kaggle-bronze-challenge")
+    image_name = project_cfg.get("imageName", "kaggle-bronze-gcp")
     image_tag = project_cfg.get("imageTag", "latest")
     return f"{region}-docker.pkg.dev/{project}/{repo}/{image_name}:{image_tag}"
 

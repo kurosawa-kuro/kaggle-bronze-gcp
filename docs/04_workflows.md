@@ -52,10 +52,13 @@ touch src/features/ratios.py
 初回または GCP リソース未作成時:
 
 ```bash
-make gcp-bootstrap
+make terraform-init
+make terraform-plan
 ```
 
-`gcp-bootstrap` は Vertex / Artifact Registry / GCS の最小リソースを作る。BigQuery dataset（既定 `kaggle_ops`）は実験ログ・コストログで使うため、未作成なら別途作成しておく。
+GCP の土台は `infra/terraform/` が正本。既存の GCS bucket / Artifact Registry repo / BigQuery dataset は
+`imports.tf` の import block で取り込んでから管理する。`make gcp-bootstrap` は互換 wrapper として残すが、
+新規作成は行わず Terraform への案内だけを出す。
 
 データ・コードを準備:
 
@@ -85,6 +88,7 @@ make train-vertex CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm SPOT=
 make collect CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm
 make cost-record CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm
 make cost
+make compare
 ```
 
 ## 複数 config の並列 sweep
@@ -130,6 +134,17 @@ make hp-tune CONFIG=configs/lgbm_baseline.yaml RUN_ID=hpt01 MAX_TRIALS=20 PARALL
 ```
 
 quota に当たる場合は `vertexMachineType` や `PARALLEL` を下げる。
+
+## 実験比較
+
+```bash
+make compare
+make compare RUN_LIKE="hpt01%" LIMIT=50
+```
+
+`compare` は BigQuery `experiments` と `cost_estimates` を `run_id` で JOIN し、CV score / metric /
+competition / source / 概算 JPY を一覧する。Vertex sweep / HPO は投入後に `make collect` と
+`make cost-record` を行うと、比較表に成果物と概算コストの両方が揃う。
 
 ## モデル登録（Vertex Model Registry）
 
