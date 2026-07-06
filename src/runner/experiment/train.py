@@ -231,6 +231,15 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+    if len(seeds) > 1:
+        from utils.logger import log_run
+
+        log_run(
+            run_id=run_id,
+            cv_score=float(metrics["cv_score"]),
+            params={**model_cfg.get("params", {}), "seeds": seeds},
+            notes=f"{run_id} seed-averaged via train.py",
+        )
 
     # all_models は seed×fold 全モデル → predict/make_submission の平均が seed 平均になる
     _write_oof(run_dir / "oof.parquet", y_train, oof, trained_mask)

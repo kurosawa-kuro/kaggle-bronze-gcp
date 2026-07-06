@@ -42,6 +42,15 @@ def upload_directory(local_dir: Path, destination: GcsPrefix) -> list[str]:
     return uploaded
 
 
+def upload_file(local_path: Path, destination: GcsPrefix) -> str:
+    from google.cloud import storage
+
+    client = storage.Client()
+    bucket = client.bucket(destination.bucket)
+    bucket.blob(destination.prefix).upload_from_filename(str(local_path))
+    return f"gs://{destination.bucket}/{destination.prefix}"
+
+
 def download_directory(source: GcsPrefix, local_dir: Path) -> list[Path]:
     from google.cloud import storage
 

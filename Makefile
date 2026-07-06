@@ -1,4 +1,4 @@
-.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
+.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-input batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
 
 VENV   := .venv
 PYTHON := $(VENV)/bin/python
@@ -102,6 +102,9 @@ build-push-serving:
 	docker buildx build --platform linux/amd64 -f infra/Dockerfile.serving -t $(SERVING_IMAGE) --push .
 
 # Submit a Vertex Batch Prediction job. SRC=gs://.../instances.jsonl. DRY=--dry-run.
+batch-input:
+	$(PYRUN) runner.ops.batch_input --config $(CONFIG) --run-id $(RUN_ID) $(if $(LIMIT),--limit $(LIMIT),)
+
 batch-predict:
 	$(PYRUN) runner.model.batch_predict --config $(CONFIG) --run-id $(RUN_ID) --gcs-source $(SRC) $(DRY)
 
