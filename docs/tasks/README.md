@@ -57,7 +57,7 @@ ROGII 実戦（entry 締切 2026-07-29）に向けた P0 系列。出典は [ide
 | [active/2026-07-06-p0-2-package-kernel.md](active/2026-07-06-p0-2-package-kernel.md) | code comp 用 package-kernel 経路（前処理状態の永続化を含む。P0-0 完了が着手条件） |
 | [active/2026-07-06-p0-3-submissions-ledger.md](active/2026-07-06-p0-3-submissions-ledger.md) | BQ `submissions` 提出台帳 + `make lb-sync`（他タスクと並行可） |
 | [active/2026-07-06-p0-4-multimodel-blend.md](active/2026-07-06-p0-4-multimodel-blend.md) | CatBoost/XGBoost 統合 + OOF blend ops（P0-1 が前提） |
-| [active/refactoring-candidates.md](active/refactoring-candidates.md) | 残りのクリーンアップ候補 |
+| [active/refactoring-candidates.md](active/refactoring-candidates.md) | **タスクコントロール**（状態・順序・マイルストーン・P1/P2 キュー + cleanup 候補） |
 
 完了済みの主要仕様は `docs/01_requirements.md`〜`docs/08_release_runbook.md` と `docs/adr/` に昇格済み。古い done task は正本として扱わない。
 
@@ -85,5 +85,5 @@ ROGII 実戦（entry 締切 2026-07-29）に向けた P0 系列。出典は [ide
 ## Notes
 ```
 
-次に着手できる作業は
-[active/refactoring-candidates.md](active/refactoring-candidates.md) で管理する。
+次に着手できる作業・実行順・マイルストーンは
+[active/refactoring-candidates.md](active/refactoring-candidates.md)（タスクコントロール）で管理する。
