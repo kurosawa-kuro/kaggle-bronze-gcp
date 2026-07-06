@@ -266,6 +266,21 @@ make cost-notify
 make submit CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm MSG="exp001 lgbm baseline"
 ```
 
+Code Competition の推論専用 package / Notebook 生成:
+
+```bash
+make package-kernel CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id>
+
+# Kaggle private Dataset まで作成/更新する場合
+make package-kernel CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id> \
+  PACKAGE_ARGS="--create-dataset --version-message <message>"
+```
+
+- `model/preprocess.json` に学習時の前処理状態を保存し、kernel 側では fit せず transform のみ行う。
+- 生成先は `outputs/kernel_packages/<comp>/<run_id>/`。
+- 生成される `kernel_inference.py` / `kernel_inference.ipynb` は学習コードを含まず、`model/` の booster 平均で `submission.csv` を作る。
+- 現時点の package script は標準 `test.csv` コンペ用。ROGII のような directory dataset は competition adapter を追加して接続する。
+
 旧 root `submission.csv` を直接出す場合:
 
 ```bash

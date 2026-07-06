@@ -8,7 +8,7 @@
 
 | マイルストーン | 期日 | 状態 |
 |---|---|---|
-| P0-0 完了（参戦 go/no-go 判断） | 2026-07-07 | 未 |
+| P0-0 完了（参戦 go/no-go 判断） | 2026-07-07 | ✅ 2026-07-06 |
 | ROGII 初回 notebook 提出 | 2026-07-13（理想） | 未 |
 | ROGII entry 締切 | **2026-07-29（固定）** | — |
 | ROGII final submission | **2026-08-05（固定）** | — |
@@ -19,10 +19,10 @@
 
 | 順 | タスク | 状態 | 前提 | 目安 |
 |---|---|---|---|---|
-| 1 | [P0-0 ROGII ルール確認](2026-07-06-p0-0-rogii-rules-check.md) | 未着手 | なし | 0.5日 |
-| 2 | [P0-A config 単一正本化](2026-07-06-p0-a-config-single-source.md) | 未着手 | なし（P0-0 と並行可） | 1日 |
-| 3 | [P0-1 CV strategy config 駆動化](2026-07-06-p0-1-cv-strategy-config.md) | 未着手 | P0-A（group_col は P0-0） | 1〜2日 |
-| 4 | [P0-2 package-kernel](2026-07-06-p0-2-package-kernel.md) | 未着手 | **P0-0 完了必須**（持込方式が決まる） | 1〜2日 |
+| 1 | [P0-0 ROGII ルール確認](2026-07-06-p0-0-rogii-rules-check.md) | ✅ 2026-07-06 | なし | 0.5日 |
+| 2 | [P0-A config 単一正本化](2026-07-06-p0-a-config-single-source.md) | ✅ 2026-07-06 | なし（P0-0 と並行可） | 1日 |
+| 3 | [P0-1 CV strategy config 駆動化](2026-07-06-p0-1-cv-strategy-config.md) | ✅ 2026-07-06 | P0-A（group_col は P0-0） | 1〜2日 |
+| 4 | [P0-2 package-kernel](2026-07-06-p0-2-package-kernel.md) | ✅ 2026-07-06 | **P0-0 完了必須**（持込方式が決まる） | 1〜2日 |
 | 随時 | [P0-3 提出台帳](2026-07-06-p0-3-submissions-ledger.md) | 未着手 | なし。**初回提出前までに** | 0.5日 |
 | 5 | [P0-4 マルチモデル + blend](2026-07-06-p0-4-multimodel-blend.md) | 未着手 | P0-A + P0-1 | 2〜3日 |
 
@@ -31,13 +31,15 @@
 | 候補 | 発動条件 |
 |---|---|
 | P0-C: metric registry + 方向一元化（tune/hp_tune/compare の3重複解消） | ROGII の指標が rmse/auc/logloss 以外なら**即 P0**。該当しなくても P1 上位 |
-| P0-D: sample_submission 正本化 + submission_contract.json | ROGII の提出形式が ID+target 単純形式でないなら P0-2 とセットで |
+| P0-D: sample_submission 正本化 + submission_contract.json | ROGII は `id,tvt` の単純列だが、hidden test 置換型の Notebook 提出なので P0-E とセットで `sample_submission.csv` 正本化を実装する |
+| P0-E: ROGII directory adapter | ROGII 初回提出前。`train/*.csv` / `test/*.csv` から `well_id` と sample row を組み立て、package kernel の標準CSV前提へ接続する |
 
 ## P1 キュー（ROGII 参戦後〜2週目）
 
 - adversarial validation の標準成果物化（初週に1回、train/test ずれ診断）
 - FE registry（`features:` リスト化。sweep の弾倉。ROGII 2週目の主戦場）
 - `make init` の `configs/<comp>/baseline.yaml` 自動生成
+- ROGII 形式の `make init` 対応（単一CSV前提から、directory dataset / loader scaffold 生成へ拡張）
 - BQ JOIN を `(competition, run_id)` に修正（compare.py / submissions）
 - interim cache の init 時自動削除 + schema hash 照合
 - 失敗 run の台帳記録（status 列）

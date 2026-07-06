@@ -114,6 +114,7 @@ def run(
     hp_metric_tag: str | None = None,
 ) -> Path:
     config_path = config_path.resolve()
+    os.environ["KBC_CONFIG_PATH"] = str(config_path)
     cfg = _load_yaml(config_path)
     if param_overrides:
         # Vertex HP Tuning が渡す探索パラメータで model.params を上書き
@@ -138,11 +139,11 @@ def run(
         print(f"[train] output={run_dir}")
         _write_config_snapshot(config_path, run_dir)
         if input_uri and not dry_run:
-            from config import DATA_RAW
             from utils.artifact_store import GcsPrefix, download_directory
 
-            staged = download_directory(GcsPrefix.parse(input_uri), DATA_RAW)
-            print(f"[train] staged {len(staged)} input files from {input_uri} -> {DATA_RAW}")
+            raw_dir = _raw_data_dir(data_cfg)
+            staged = download_directory(GcsPrefix.parse(input_uri), raw_dir)
+            print(f"[train] staged {len(staged)} input files from {input_uri} -> {raw_dir}")
         if dry_run:
             _write_dummy_artifacts(run_dir, cfg, run_id, competition)
         else:
@@ -182,15 +183,31 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
     max_folds = int(runtime_cfg.get("smoke_max_folds", 1)) if smoke else None
     num_boost_round = int(runtime_cfg.get("smoke_num_boost_round", 20)) if smoke else int(runtime_cfg.get("num_boost_round", 2000))
     early_stopping_rounds = int(runtime_cfg.get("early_stopping_rounds", 50))
+    cv_strategy = cv_cfg.get("strategy")
+    group_col = cv_cfg.get("group_col")
 
     default_seed = int(cv_cfg.get("seed", 42))
     seeds = [default_seed] if smoke else [int(s) for s in (cfg.get("seeds") or [default_seed])]
 
     train_df, test_df = load_data()
-    X_train, y_train, X_test = make_features(train_df, test_df)
+    groups = _cv_groups(train_df, group_col=group_col, strategy=cv_strategy)
+    X_train, y_train, X_test, preprocess_state = make_features(train_df, test_df, return_preprocess_state=True)
+    if group_col:
+        X_train = X_train.drop(columns=[group_col], errors="ignore")
+        X_test = X_test.drop(columns=[group_col], errors="ignore")
     _write_dataset_snapshot(run_dir / "dataset_snapshot.json", train_df, test_df, cfg)
-    _write_fold_manifest(run_dir / "fold_manifest.json", X_train, y_train, cfg, n_folds=n_folds, seeds=seeds, max_folds=max_folds)
-    _write_leakage_audit(run_dir / "leakage_audit.json", train_df, test_df, X_train, X_test, cfg)
+    _write_fold_manifest(
+        run_dir / "fold_manifest.json",
+        X_train,
+        y_train,
+        cfg,
+        n_folds=n_folds,
+        seeds=seeds,
+        max_folds=max_folds,
+        groups=groups,
+        cv_strategy=cv_strategy,
+    )
+    _write_leakage_audit(run_dir / "leakage_audit.json", train_df, test_df, X_train, X_test, cfg, group_col=group_col)
 
     # seed ごとに CV 学習し、oof / test 予測を seed 横断で平均（seed bagging）
     oof_per_seed: list[np.ndarray] = []
@@ -208,6 +225,8 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
             num_boost_round=num_boost_round,
             early_stopping_rounds=early_stopping_rounds,
             log_run_id=f"{run_id}_s{sd}" if len(seeds) > 1 else run_id,
+            cv_strategy=cv_strategy,
+            groups=groups,
         )
         mask_s = _trained_mask(oof_s)
         seed_scores.append({"seed": sd, "cv_score": cv_score(y_train.loc[mask_s].to_numpy(), oof_s[mask_s])})
@@ -225,6 +244,8 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
         "seeds": seeds,
         "n_seeds": len(seeds),
         "seed_scores": seed_scores,
+        "cv_strategy": cv_strategy,
+        "group_col": group_col,
         "n_folds_requested": n_folds,
         "n_folds_trained": int(max_folds or n_folds),
         "smoke": smoke,
@@ -239,6 +260,8 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
             cv_score=float(metrics["cv_score"]),
             params={**model_cfg.get("params", {}), "seeds": seeds},
             notes=f"{run_id} seed-averaged via train.py",
+            competition=cfg.get("data", cfg)["comp"],
+            metric=cfg.get("data", cfg)["metric"],
         )
 
     # all_models は seed×fold 全モデル → predict/make_submission の平均が seed 平均になる
@@ -257,7 +280,7 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
         "n_folds_trained": int(max_folds or n_folds),
         "feature_names": list(map(str, X_train.columns)),
         "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    }, preprocess=preprocess_state)
     return float(metrics["cv_score"])
 
 
@@ -276,6 +299,23 @@ def _report_hp_metric(tag: str, value: float) -> None:
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _raw_data_dir(data_cfg: dict[str, Any]) -> Path:
+    return Path(data_cfg.get("raw_dir") or Path("data") / data_cfg["comp"] / "raw")
+
+
+def _cv_groups(train_df: pd.DataFrame, *, group_col: str | None, strategy: str | None) -> pd.Series | None:
+    if strategy != "group":
+        return None
+    if not group_col:
+        raise ValueError("cv.strategy=group requires cv.group_col")
+    if group_col not in train_df.columns:
+        raise ValueError(f"cv.group_col not found in train data: {group_col}")
+    groups = train_df[group_col]
+    if groups.isna().any():
+        raise ValueError(f"cv.group_col contains {int(groups.isna().sum())} null values: {group_col}")
+    return groups
 
 
 def _make_run_id(model_name: str) -> str:
@@ -374,21 +414,34 @@ def _write_fold_manifest(
     n_folds: int,
     seeds: list[int],
     max_folds: int | None,
+    groups: pd.Series | None = None,
+    cv_strategy: str | None = None,
 ) -> None:
-    from sklearn.model_selection import KFold, StratifiedKFold
+    from pipelines.splits import group_overlap_report, make_splits, resolve_strategy
 
     data_cfg = cfg.get("data", cfg)
     objective = data_cfg.get("objective", "regression")
+    resolved_strategy = resolve_strategy(cv_strategy, objective)
     folds: list[dict[str, Any]] = []
+    group_reports: list[dict[str, Any]] = []
     for seed in seeds:
-        splitter = (
-            KFold(n_splits=n_folds, shuffle=True, random_state=seed)
-            if objective == "regression"
-            else StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+        splits = make_splits(
+            X_train,
+            y_train,
+            objective=objective,
+            strategy=cv_strategy,
+            n_folds=n_folds,
+            seed=seed,
+            groups=groups,
         )
-        splits = list(splitter.split(X_train, y_train))
         if max_folds is not None:
             splits = splits[:max_folds]
+        group_report = group_overlap_report(splits, groups)
+        if group_report is not None:
+            group_report = {"seed": seed, **group_report}
+            group_reports.append(group_report)
+            if group_report["overlap_count"] > 0:
+                raise ValueError(f"group overlap detected in folds: {group_report['overlaps'][:3]}")
         for fold, (train_idx, valid_idx) in enumerate(splits):
             folds.append({
                 "seed": seed,
@@ -400,10 +453,13 @@ def _write_fold_manifest(
     _write_json(path, {
         "competition": data_cfg.get("comp"),
         "objective": objective,
+        "strategy": resolved_strategy,
+        "group_col": cfg.get("cv", {}).get("group_col"),
         "n_folds_requested": n_folds,
         "n_folds_materialized": int(max_folds or n_folds),
         "seeds": seeds,
         "folds": folds,
+        "group_reports": group_reports,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
@@ -415,6 +471,7 @@ def _write_leakage_audit(
     X_train: pd.DataFrame,
     X_test: pd.DataFrame,
     cfg: dict[str, Any],
+    group_col: str | None = None,
 ) -> None:
     data_cfg = cfg.get("data", cfg)
     target = data_cfg.get("target", "target")
@@ -426,6 +483,23 @@ def _write_leakage_audit(
         warnings.append("target column is present in X_train features")
     if feature_only_train or feature_only_test:
         warnings.append("train/test feature columns differ")
+    group_audit = None
+    if group_col:
+        if group_col not in train_df.columns:
+            warnings.append(f"group_col not found in train: {group_col}")
+        elif group_col not in test_df.columns:
+            group_audit = {"group_col": group_col, "test_has_group_col": False}
+        else:
+            train_groups = set(map(str, train_df[group_col].dropna().unique().tolist()))
+            test_groups = set(map(str, test_df[group_col].dropna().unique().tolist()))
+            overlap = train_groups & test_groups
+            group_audit = {
+                "group_col": group_col,
+                "train_groups": len(train_groups),
+                "test_groups": len(test_groups),
+                "overlap_groups": len(overlap),
+                "overlap_rate_test": (len(overlap) / len(test_groups)) if test_groups else 0.0,
+            }
     _write_json(path, {
         "competition": data_cfg.get("comp"),
         "target": target,
@@ -434,12 +508,13 @@ def _write_leakage_audit(
         "train_only_raw_columns_except_target": train_only_raw,
         "feature_only_train_columns": feature_only_train,
         "feature_only_test_columns": feature_only_test,
+        "group_audit": group_audit,
         "feature_schema_hash": _schema_hash(X_train),
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
 
-def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any]) -> None:
+def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any], preprocess: dict[str, Any] | None = None) -> None:
     """学習済み booster を保存（Vertex Model Registry 登録 = runner.model.register の成果物）。
 
     seed×fold の全 booster を保存し、推論は全 booster の平均（pipelines.score.predict と同じ）。
@@ -462,6 +537,9 @@ def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any]) -
     }
     (model_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    if preprocess is not None:
+        (model_dir / "preprocess.json").write_text(
+            json.dumps(preprocess, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[train] saved {len(saved)} boosters -> {model_dir}")
 
 

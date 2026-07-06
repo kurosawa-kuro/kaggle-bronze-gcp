@@ -1,6 +1,6 @@
 # 複数コンペ切替アーキテクチャ再評価（2026-07-06）
 
-> 依頼: [backlog/2026-07-06_multi_competition_architecture.md](../backlog/2026-07-06_multi_competition_architecture.md) の調査結果と、[idea/2026-07-06_bronze-strategy-review.md](2026-07-06_bronze-strategy-review.md)（前回レビュー）を鵜呑みにせず、コードを読み直して再評価したもの。
+> 依頼: 他 AI エージェントによるアーキテクチャ調査（旧 `backlog/2026-07-06_multi_competition_architecture.md`。本レビューに統合済みのため削除、原文は git 履歴にあり）と、[idea/2026-07-06_bronze-strategy-review.md](2026-07-06_bronze-strategy-review.md)（前回レビュー）を鵜呑みにせず、コードを読み直して再評価したもの。
 > 主眼: ROGII 単発対応ではなく、**ブロンズ取得まで複数コンペを渡り歩ける低切替コスト基盤**にするためのリファクタリング。
 > 本文の主張はすべて 2026-07-06 時点のコードで実際に確認済み（セクション4に根拠）。
 

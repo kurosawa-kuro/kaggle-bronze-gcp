@@ -5,15 +5,15 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
 from config import ID_COL, TARGET
-from pipelines.ingest import encode
+from pipelines.ingest import apply_preprocessor, fit_preprocessor
 
 # multiclass 時に make_features() が設定する。score.py が参照して class 名に戻す。
 LABEL_CLASSES: list[str] | None = None
 
 
 def make_features(
-    train_df: pd.DataFrame, test_df: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+    train_df: pd.DataFrame, test_df: pd.DataFrame, *, return_preprocess_state: bool = False
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame] | tuple[pd.DataFrame, pd.Series, pd.DataFrame, dict]:
     """X_train, y_train, X_test を返す。"""
     global LABEL_CLASSES
 
@@ -36,5 +36,12 @@ def make_features(
     else:
         LABEL_CLASSES = None
 
-    X_train, X_test = encode(X_train, X_test)
+    preprocess_state = fit_preprocessor(X_train)
+    X_train = apply_preprocessor(X_train, preprocess_state)
+    X_test = apply_preprocessor(X_test, preprocess_state)
+    preprocess_state["target"] = TARGET
+    preprocess_state["id_col"] = ID_COL
+    preprocess_state["label_classes"] = LABEL_CLASSES
+    if return_preprocess_state:
+        return X_train, y_train, X_test, preprocess_state
     return X_train, y_train, X_test

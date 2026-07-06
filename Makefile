@@ -1,4 +1,4 @@
-.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-input batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
+.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-input batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy package-kernel stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
 
 VENV   := .venv
 PYTHON := $(VENV)/bin/python
@@ -17,7 +17,7 @@ AR_REPO ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJ
 IMAGE_NAME ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("imageName") or "kaggle-bronze-gcp")' 2>/dev/null)
 IMAGE_TAG ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("imageTag") or "latest")' 2>/dev/null)
 GCS_BUCKET ?= $(shell $(PYTHON) -c 'import yaml; print((yaml.safe_load(open("$(PROJECT_CONFIG)")) or {}).get("gcsBucket") or "")' 2>/dev/null)
-COMP_DATA ?= $(shell $(PYTHON) -c 'import yaml; c=yaml.safe_load(open("env/config.yaml")) or {}; print(c.get("comp") or c.get("data", {}).get("comp") or "")' 2>/dev/null)
+COMP_DATA ?= $(shell $(PYTHON) -c 'import yaml; c=yaml.safe_load(open("$(CONFIG)")) or {}; print(c.get("comp") or c.get("competition", {}).get("slug") or c.get("data", {}).get("comp") or "")' 2>/dev/null)
 IMAGE ?= $(REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(AR_REPO)/$(IMAGE_NAME):$(IMAGE_TAG)
 SERVING_IMAGE ?= $(REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(AR_REPO)/$(IMAGE_NAME)-serving:$(IMAGE_TAG)
 # overnight バッチ既定で Spot（約1/3以下）。on-demand にするには: make train-vertex SPOT=
@@ -154,6 +154,11 @@ download:
 # Kaggle 提出: make submit CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001 MSG="exp001 lgbm baseline"
 submit:
 	doppler run -- sh -c 'KAGGLE_API_TOKEN="$$ML_KAGGLE_TOKEN" PYTHONPATH=src $(PYTHON) -m runner.ops.submit --config $(CONFIG) --run-id $(RUN_ID) --message "$(MSG)"'
+
+# Code Competition 用の推論専用 package/notebook 生成。
+# Kaggle Dataset まで publish する場合: make package-kernel ... PACKAGE_ARGS="--create-dataset"
+package-kernel:
+	doppler run --project kuro-dev-k --config dev -- sh -c 'KAGGLE_API_TOKEN="$$ML_KAGGLE_TOKEN" PYTHONPATH=src $(PYTHON) -m runner.ops.package_kernel --config $(CONFIG) --run-id $(RUN_ID) $(PACKAGE_ARGS)'
 
 # 旧提出経路: repository root の submission.csv を直接提出
 submit-legacy:

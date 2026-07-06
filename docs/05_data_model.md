@@ -44,8 +44,10 @@ model:
     num_leaves: 63
 
 cv:
+  strategy: "stratified"   # 未指定なら objective から自動選択: regression=kfold, others=stratified
   n_folds: 5
   seed: 42
+  group_col: null          # strategy: group のとき必須
 
 seeds: [42, 777, 2026]
 
@@ -62,6 +64,8 @@ runtime:
 
 - `runner.experiment.train` は full run では `seeds` を横断し、OOF / test prediction / feature importance を平均する。
 - smoke では `cv.seed` 単発。
+- `cv.strategy` は `kfold` / `stratified` / `group`。未指定なら従来互換で `objective` から自動選択する。
+- `cv.strategy: group` では `cv.group_col` が必須。fold_manifest に group overlap 検査を保存し、overlap があれば学習を止める。
 - `experiments_db` が残っている config は旧互換の名残で、現行 logger は BigQuery を使う。
 - `model.name` は現状 `lgbm` のみ runner 対応。
 

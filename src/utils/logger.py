@@ -10,7 +10,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from config import COMP, METRIC
 from utils import bq
 
 _TABLE_NAME = "experiments"
@@ -44,7 +43,16 @@ def _ensure(project: str, dataset: str) -> None:
     _ensured = True
 
 
-def log_run(run_id: str, cv_score: float, params: dict, notes: str = "") -> None:
+def log_run(
+    run_id: str,
+    cv_score: float,
+    params: dict,
+    notes: str = "",
+    *,
+    competition: str | None = None,
+    metric: str | None = None,
+) -> None:
+    competition, metric = _resolve_context(competition=competition, metric=metric)
     project, dataset = bq.load_gcp()
     if not project:
         print(f"[logger] gcpProject 未設定: BQ 記録を skip  run_id={run_id} cv_score={cv_score:.5f}")
@@ -55,8 +63,8 @@ def log_run(run_id: str, cv_score: float, params: dict, notes: str = "") -> None
             "run_id": run_id,
             "recorded_at": datetime.now(timezone.utc).isoformat(),
             "cv_score": cv_score,
-            "metric": METRIC,
-            "competition": COMP,
+            "metric": metric,
+            "competition": competition,
             "params": json.dumps(params, ensure_ascii=False),
             "notes": notes,
             "source": "cv",
@@ -65,11 +73,19 @@ def log_run(run_id: str, cv_score: float, params: dict, notes: str = "") -> None
     except Exception as exc:  # noqa: BLE001 - 記録失敗で学習本体は止めない
         message = f"[logger] WARN: BQ 記録失敗 run_id={run_id}: {type(exc).__name__}: {exc}"
         print(message)
-        _write_warning_artifact(run_id, message)
+        _write_warning_artifact(run_id, message, competition=competition)
 
 
-def _write_warning_artifact(run_id: str, message: str) -> None:
-    run_dir = _warning_run_dir(run_id)
+def _resolve_context(*, competition: str | None, metric: str | None) -> tuple[str, str]:
+    if competition and metric:
+        return competition, metric
+    from config import COMP, METRIC
+
+    return competition or COMP, metric or METRIC
+
+
+def _write_warning_artifact(run_id: str, message: str, *, competition: str) -> None:
+    run_dir = _warning_run_dir(run_id, competition=competition)
     if run_dir is None:
         return
     warning_dir = run_dir / "warnings"
@@ -77,8 +93,8 @@ def _write_warning_artifact(run_id: str, message: str) -> None:
     (warning_dir / "bq_logger_warning.txt").write_text(message + "\n", encoding="utf-8")
 
 
-def _warning_run_dir(run_id: str) -> Path | None:
-    root = Path("outputs/runs") / COMP
+def _warning_run_dir(run_id: str, *, competition: str) -> Path | None:
+    root = Path("outputs/runs") / competition
     candidates = [run_id]
     for marker in ("_s", "_t"):
         prefix, sep, suffix = run_id.rpartition(marker)

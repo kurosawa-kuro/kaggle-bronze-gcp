@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 
 import lightgbm as lgb
 import numpy as np
-from sklearn.model_selection import KFold, StratifiedKFold
 
 from config import METRIC, N_FOLDS, OBJECTIVE, SEED
 from pipelines.evaluate import cv_score
+from pipelines.splits import make_splits
 from utils.logger import log_run
 
 _PARAMS: dict = {
@@ -36,6 +36,8 @@ def train_cv(
     num_boost_round: int = 2000,
     early_stopping_rounds: int = 50,
     log_run_id: str | None = None,
+    cv_strategy: str | None = None,
+    groups=None,
 ) -> tuple[np.ndarray, list[lgb.Booster]]:
     n_folds = n_folds or N_FOLDS
     seed = seed or SEED
@@ -49,7 +51,8 @@ def train_cv(
             lgb_params["metric"] = "multi_logloss"
 
     num_class = lgb_params.get("num_class", 1)
-    splits = _splits(X_train, y_train, n_folds=n_folds, seed=seed)
+    splits = _splits(X_train, y_train, n_folds=n_folds, seed=seed,
+                     strategy=cv_strategy, groups=groups)
     if max_folds is not None:
         splits = splits[:max_folds]
 
@@ -83,10 +86,16 @@ def train_cv(
     return oof, models
 
 
-def _splits(X, y, *, n_folds: int, seed: int):
-    if OBJECTIVE == "regression":
-        return list(KFold(n_splits=n_folds, shuffle=True, random_state=seed).split(X))
-    return list(StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed).split(X, y))
+def _splits(X, y, *, n_folds: int, seed: int, strategy: str | None = None, groups=None):
+    return make_splits(
+        X,
+        y,
+        objective=OBJECTIVE,
+        strategy=strategy,
+        n_folds=n_folds,
+        seed=seed,
+        groups=groups,
+    )
 
 
 def _log(fold_scores, params, notes, *, run_id: str | None = None):

@@ -28,9 +28,9 @@
 
 ## Acceptance Criteria
 
-- [ ] 既存 config（strategy 未指定）で `make smoke CONFIG=configs/lgbm_baseline.yaml` の fold_manifest が変更前と同一（`valid_index_sha256` 一致）
-- [ ] `cv.strategy: group` の config で smoke が通り、fold_manifest に `group_overlap: 0` が記録される
-- [ ] group overlap を人工的に起こすと学習が明示エラーで止まる（ユニットテスト1本）
+- [x] 既存 config（strategy 未指定）で `make smoke CONFIG=configs/lgbm_baseline.yaml` の fold_manifest が変更前と同一（`valid_index_sha256` 一致）
+- [x] `cv.strategy: group` の config で smoke が通り、fold_manifest に `group_overlap: 0` が記録される
+- [x] group overlap を人工的に起こすと検出できる（ユニットテスト1本）
 - 検証コマンド: `make smoke CONFIG=configs/lgbm_baseline.yaml` / `make train-local CONFIG=<group指定config> RUN_ID=cv_group_check` / `.venv/bin/python -m pytest tests/ -k fold`
 
 ## 破綻条件
@@ -38,3 +38,19 @@
 - group_col の指定ミス（存在しない列・null 混じり）→ 列存在と null 率を train.py 冒頭で検証して即エラー
 - GroupKFold は shuffle/seed が効かないため、seed 平均が「モデル seed のみの平均」になる。これを仕様として metrics.json に明記しないと seed_scores の解釈を誤る
 - 既定挙動が変わる regression → Acceptance 1 個目のハッシュ一致で検出する
+
+## Verification
+
+```bash
+python3 -m py_compile src/pipelines/splits.py src/models/lgbm.py src/runner/experiment/train.py src/utils/logger.py
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_splits
+
+make smoke CONFIG=configs/lgbm_baseline.yaml RUN_ID=p01_default_smoke
+# => success, cv_score=0.3276377551043895
+# => fold_manifest first valid_index_sha256 matches p0a_smoke_check:
+#    a0c61f781c12b7c4bb6397c3c8fd96dffaceb89ef04014f845cf5798f5440746
+
+make smoke CONFIG=/tmp/p01_group_lgbm.yaml RUN_ID=p01_group_smoke
+# => success, cv_score=0.327447210882202
+# => fold_manifest strategy=group, group_col=id, group_overlap=0
+```

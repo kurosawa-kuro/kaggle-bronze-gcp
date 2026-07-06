@@ -58,21 +58,71 @@ def encode(
     X_train: pd.DataFrame, X_test: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """null 埋め + OrdinalEncoding。fit は学習データのみ（リーク防止）。"""
+    state = fit_preprocessor(X_train)
+    return apply_preprocessor(X_train, state), apply_preprocessor(X_test, state)
+
+
+def fit_preprocessor(X_train: pd.DataFrame) -> dict:
+    """学習データだけから推論再現に必要な前処理状態を作る。"""
     cat_cols = X_train.select_dtypes(exclude=np.number).columns.tolist()
     num_cols = X_train.select_dtypes(include=np.number).columns.tolist()
 
+    filled = X_train.copy()
+    medians: dict[str, float | None] = {}
     for col in num_cols:
-        med = X_train[col].median()
-        X_train[col] = X_train[col].fillna(med)
-        X_test[col] = X_test[col].fillna(med)
+        med = filled[col].median()
+        medians[col] = None if pd.isna(med) else float(med)
+        filled[col] = filled[col].fillna(med)
 
     for col in cat_cols:
-        X_train[col] = X_train[col].fillna("__missing__")
-        X_test[col] = X_test[col].fillna("__missing__")
+        filled[col] = filled[col].fillna("__missing__")
 
+    categories: dict[str, list] = {}
     if cat_cols:
         enc = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
-        X_train[cat_cols] = enc.fit_transform(X_train[cat_cols])
-        X_test[cat_cols] = enc.transform(X_test[cat_cols])
+        enc.fit(filled[cat_cols])
+        categories = {
+            col: [_json_scalar(v) for v in cats.tolist()]
+            for col, cats in zip(cat_cols, enc.categories_, strict=True)
+        }
 
-    return X_train, X_test
+    return {
+        "version": 1,
+        "numeric_cols": list(map(str, num_cols)),
+        "categorical_cols": list(map(str, cat_cols)),
+        "feature_names_in": list(map(str, X_train.columns)),
+        "numeric_medians": medians,
+        "categorical_categories": categories,
+        "unknown_category_value": -1,
+        "missing_category_value": "__missing__",
+    }
+
+
+def apply_preprocessor(X: pd.DataFrame, state: dict) -> pd.DataFrame:
+    """保存済み前処理状態で特徴量を変換する。未知カテゴリは -1。"""
+    out = X.copy()
+    feature_names = state["feature_names_in"]
+    missing = [col for col in feature_names if col not in out.columns]
+    if missing:
+        raise ValueError(f"missing feature columns for preprocessing: {missing[:5]}")
+    out = out[feature_names]
+
+    for col in state.get("numeric_cols", []):
+        med = state.get("numeric_medians", {}).get(col)
+        if med is not None:
+            out[col] = out[col].fillna(med)
+
+    missing_value = state.get("missing_category_value", "__missing__")
+    unknown_value = state.get("unknown_category_value", -1)
+    for col in state.get("categorical_cols", []):
+        categories = state.get("categorical_categories", {}).get(col, [])
+        mapping = {value: idx for idx, value in enumerate(categories)}
+        out[col] = out[col].fillna(missing_value).map(mapping).fillna(unknown_value).astype(float)
+
+    return out
+
+
+def _json_scalar(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    return value

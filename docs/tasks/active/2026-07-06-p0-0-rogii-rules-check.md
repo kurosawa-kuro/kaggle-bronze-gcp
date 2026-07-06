@@ -31,12 +31,41 @@
 
 ## Acceptance Criteria
 
-- [ ] 上記 Scope の 5 項目すべてが `docs/competitions/rogii-wellbore-geology-prediction.md` に根拠 URL 付きで記入されている
-- [ ] P0-1（group_col）と P0-2（持込方式）への引き渡し判断が明文化されている
-- [ ] 指標サポートの要否判断が記録され、未対応なら繰り上げタスクが作成されている
-- 検証コマンド: `make init COMP=rogii-wellbore-geology-prediction` が完走し、`data/rogii-wellbore-geology-prediction/raw/` に train/test が正規化配置される
+- [x] 上記 Scope の 5 項目すべてが `docs/competitions/rogii-wellbore-geology-prediction.md` に根拠 URL 付きで記入されている
+- [x] P0-1（group_col）と P0-2（持込方式）への引き渡し判断が明文化されている
+- [x] 指標サポートの要否判断が記録され、未対応なら繰り上げタスクが作成されている
+- 検証コマンド: Kaggle CLI official pages と実データ展開で確認。`make init COMP=rogii-wellbore-geology-prediction` は現行 `init_competition.py` が単一CSV前提のため、ROGII では P0-2/P1 init 強化側で対応する。
 
 ## 破綻条件
 
 - ルールページの読み間違い（特に external data と pretrained models は別条項のことが多い）→ 原文引用をドキュメントに貼る
 - 「たぶん code comp」の推測のまま P0-2 に着手する → このタスク完了を P0-2 の着手条件にする
+
+## Result
+
+2026-07-06 完了。
+
+- 公式確認元: Kaggle CLI `competitions pages rogii-wellbore-geology-prediction`（Evaluation / Code Requirements / Timeline / data-description / rules）
+- 公式ページ: https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction
+- 評価指標: RMSE。既存 `evaluate.py` の `rmse` で対応済みのため P0-C は発動しない。
+- 提出形式: Code Competition。Kaggle Notebook、internet disabled、CPU/GPU 9h、`submission.csv`。
+- 提出上限: 5 submissions/day、final submission 最大2件。
+- 外部データ/モデル: 公式 Code Requirements では freely/publicly available external data including pre-trained models が許可。rules では外部データ/ツール/モデルは公開・同等アクセス可能または合理的アクセス可能が条件。
+- データ構造: train horizontal well 773 files / train typewell 773 files / visible test horizontal well 3 files。単一CSVではない。
+- P0-1 引き渡し: `cv.strategy: group`、`cv.group_col: well_id`。`well_id` はファイル名から生成する。
+- P0-2 引き渡し: Notebook package 必須。`sample_submission.csv` を正本にし、Vertex成果物はKaggle Notebookで再現可能・ルール適合する形に限定する。
+
+実データ確認:
+
+```text
+raw children: AI_wellbore_geology_prediction_task_en.pptx, sample_submission.csv, test/, train/
+train horizontal wells: 773
+train typewells: 773
+visible test horizontal wells: 3
+visible test typewells: 3
+sample_submission: 14151 rows, columns=id,tvt
+train horizontal total rows: 5092255
+visible test horizontal total rows: 19221
+train TVT_input NaN rows: 3783989
+visible test TVT_input NaN rows: 14151
+```

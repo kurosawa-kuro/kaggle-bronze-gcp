@@ -174,6 +174,7 @@ Vertex 実行時は `gs://<bucket>/runs/<competition>/<run_id>/` に同じ内容
 - Vertex Custom Job / sweep / HPT: submitter が config YAML を base64 化し、`runner.experiment.train --config-b64 ...` へ渡す
 
 これにより config 追加・変更だけなら Docker image の rebuild は不要。`src/` や依存を変えた場合のみ `make build-push` が必要。
+runner 経路では `--config` / `--config-b64` が data セクションを含む正本であり、`env/config.yaml` は legacy `make run` / notebooks の既定値としてのみ扱う。GCS staging / ingest / featurize / metric / BigQuery logger は runner 開始時に `KBC_CONFIG_PATH` を config path へ固定してから import する。
 
 ## Protocol
 

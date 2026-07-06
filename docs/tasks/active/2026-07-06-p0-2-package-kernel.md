@@ -26,9 +26,9 @@
 
 ## Acceptance Criteria
 
-- [ ] playground-series-s6e6 の既存 run_id からパッケージを生成し、notebook 相当のスクリプトを**ローカルの素の Python で**実行して、`make train-local` が出した submission.csv と一致する（前処理再現の証明）
-- [ ] `kaggle datasets version` まで実際に通り、Kaggle 上に private Dataset ができる
-- [ ] notebook テンプレが「学習コードを含まない」ことを目視確認（推論・前処理のみ）
+- [x] playground-series-s6e6 の既存 run_id からパッケージを生成し、notebook 相当のスクリプトを**ローカルの素の Python で**実行して、`make train-local` が出した submission.csv と一致する（前処理再現の証明）
+- [x] `kaggle datasets version` まで実際に通り、Kaggle 上に private Dataset ができる
+- [x] notebook テンプレが「学習コードを含まない」ことを目視確認（推論・前処理のみ）
 - 検証コマンド: `make package-kernel CONFIG=configs/lgbm_baseline.yaml RUN_ID=full_gcp_lgbm_001` → 生成スクリプトを隔離ディレクトリで実行 → `diff` で submission 一致
 
 ## 破綻条件
@@ -37,3 +37,43 @@
 - internet-off kernel での Dataset attach 手順ミス → テンプレに attach 手順コメントを埋め込む
 - 前処理の train/kernel 間不一致（pandas バージョン差の dtype 揺れ等）→ Acceptance 1 個目の submission 完全一致で検出
 - Kaggle Dataset の 20GB/公開制約 → boosters は txt で数十 MB 級のはずだが、パッケージ時にサイズを表示して警告
+
+## Result
+
+2026-07-06 完了。
+
+実装:
+
+- `src/pipelines/ingest.py`: `fit_preprocessor()` / `apply_preprocessor()` を追加。数値median、カテゴリ順、未知カテゴリ値を永続化可能にした。
+- `src/pipelines/featurize.py`: `make_features(..., return_preprocess_state=True)` を追加。既存呼び出しは互換維持。
+- `src/runner/experiment/train.py`: `model/preprocess.json` を保存する成果物契約へ拡張。
+- `src/runner/ops/package_kernel.py`: run成果物からKaggle Dataset用 package と推論専用 `kernel_inference.py` / `kernel_inference.ipynb` を生成。
+- `Makefile`: `make package-kernel` を追加。
+
+検証:
+
+```bash
+python3 -m py_compile src/pipelines/ingest.py src/pipelines/featurize.py src/runner/experiment/train.py src/runner/ops/package_kernel.py
+make smoke CONFIG=configs/lgbm_baseline.yaml RUN_ID=p02_package_smoke
+make package-kernel CONFIG=configs/lgbm_baseline.yaml RUN_ID=p02_package_smoke
+.venv/bin/python outputs/kernel_packages/playground-series-s6e6/p02_package_smoke/kernel_inference.py \
+  --package-dir outputs/kernel_packages/playground-series-s6e6/p02_package_smoke \
+  --data-dir data/playground-series-s6e6/raw \
+  --output /tmp/kbc_p02_kernel/submission.csv
+cmp -s outputs/runs/playground-series-s6e6/p02_package_smoke/submission.csv /tmp/kbc_p02_kernel/submission.csv
+```
+
+結果:
+
+- `submission_csv_exact_match=1`
+- package size: 0.97 MiB
+- Kaggle private Dataset: https://www.kaggle.com/datasets/kurosawakuro/playground-series-s6e6-p02-package-smoke
+- `kaggle datasets create` 成功。
+- `kaggle datasets version` 成功。
+- `kaggle datasets status`: `ready`
+
+ROGII 注意:
+
+- 生成済み `kernel_inference.py` は現時点では標準 `test.csv` コンペ用。
+- ROGII は directory dataset かつ hidden test 置換型なので、`sample_submission.csv` 正本化と `well_id` 生成 adapter が別途必要。
+- ただし P0-2 の中核である「Vertex/ローカル学習済みLGBM成果物をKaggle Notebook推論専用packageへ変換し、前処理を完全再現する経路」は完了。
