@@ -1,0 +1,98 @@
+# grep: infra_surface
+
+evidence_id: ev.grep.infra_surface
+description: iac / gcp / ci / container surface
+
+- env/project.yaml:L26: gcsBucket: mlops-dev-a-kaggle-bronze-runs
+- src/runner/experiment/hp_tune.py:L42: bucket = pcfg.get("gcsBucket")
+- src/runner/experiment/hp_tune.py:L44: service_account = pcfg.get("vertexServiceAccount")
+- src/runner/experiment/hp_tune.py:L48: if not (project and bucket and image_uri):
+- src/runner/experiment/hp_tune.py:L49: raise SystemExit("[hpt] missing project / bucket / image_uri")
+- src/runner/experiment/hp_tune.py:L55: "--input-uri", f"gs://{bucket}/data/{competition}/raw",
+- src/runner/experiment/hp_tune.py:L98: aiplatform.init(project=project, location=region, staging_bucket=f"gs://{bucket}")
+- src/runner/experiment/hp_tune.py:L113: run_kwargs = {"service_account": service_account} if service_account else {}
+- src/runner/experiment/hp_tune.py:L115: hpt_job.wait_for_resource_creation()   # 作成(RPC)完了だけ待つ→resource_name 確定・プロセス終了で消えない
+- src/runner/experiment/hp_tune.py:L116: print(f"[hpt] submitted {hpt_job.resource_name}")
+- src/runner/experiment/vertex_run.py:L18: parser.add_argument("--bucket", default=None)
+- src/runner/experiment/vertex_run.py:L20: parser.add_argument("--input-uri", default=None, help="gs:// source for raw data (default: gs://<bucket>/data/<comp>/raw)")
+- src/runner/experiment/vertex_run.py:L38: bucket: str | None = None,
+- src/runner/experiment/vertex_run.py:L42: service_account: str | None = None,
+- src/runner/experiment/vertex_run.py:L50: Returns the job resource name (or the plan dict when dry_run)."""
+- src/runner/experiment/vertex_run.py:L58: bucket = bucket or project_cfg.get("gcsBucket")
+- src/runner/experiment/vertex_run.py:L61: service_account = service_account or project_cfg.get("vertexServiceAccount")
+- src/runner/experiment/vertex_run.py:L68: "bucket": bucket,
+- src/runner/experiment/vertex_run.py:L74: output_uri = f"gs://{bucket}/runs/{competition}/{run_id}"
+- src/runner/experiment/vertex_run.py:L75: input_uri = input_uri or f"gs://{bucket}/data/{competition}/raw"
+- src/runner/experiment/vertex_run.py:L106: "staging_bucket": f"gs://{bucket}",
+- src/runner/experiment/vertex_run.py:L107: "service_account": service_account,
+- src/runner/experiment/vertex_run.py:L118: aiplatform.init(project=project, location=region, staging_bucket=f"gs://{bucket}")
+- src/runner/experiment/vertex_run.py:L124: kwargs = {"service_account": service_account, "timeout": int(timeout_hours * 3600)}
+- src/runner/experiment/vertex_run.py:L132: print(f"[vertex] submitted {job.resource_name}  -> {output_uri}")
+- src/runner/experiment/vertex_run.py:L133: return job.resource_name
+- src/runner/experiment/vertex_run.py:L144: bucket=args.bucket,
+- src/runner/experiment/vertex_run.py:L148: service_account=args.service_account,
+- src/runner/model/batch_predict.py:L27: bucket: str | None = None,
+- src/runner/model/batch_predict.py:L44: bucket = bucket or project_cfg.get("gcsBucket")
+- src/runner/model/batch_predict.py:L50: missing = [name for name, value in {"project": project, "bucket": bucket}.items() if not value]
+- src/runner/model/batch_predict.py:L55: gcs_destination = gcs_destination or f"gs://{bucket}/batch_predict/{competition}/{job_tag}"
+- src/runner/model/batch_predict.py:L83: model_name = models[0].resource_name
+- src/runner/model/batch_predict.py:L95: print(f"[batch] submitted {job.resource_name}  -> {gcs_destination}")
+- src/runner/model/batch_predict.py:L96: return job.resource_name
+- src/runner/model/batch_predict.py:L116: parser.add_argument("--bucket", default=None)
+- src/runner/model/batch_predict.py:L117: parser.add_argument("--model", default=None, help="Registry の display_name か model resource name。既定 kaggle-<comp>")
+- src/runner/model/batch_predict.py:L130: bucket=args.bucket,
+- src/runner/model/deploy.py:L65: print(f"[deploy] {model_ref} -> {endpoint.resource_name}  (⚠️常駐コスト: 不要になったら teardown)")
+- src/runner/model/deploy.py:L66: return endpoint.resource_name
+- src/runner/model/deploy.py:L95: print(f"[deploy] torn down {ep.resource_name}")
+- src/runner/model/deploy.py:L133: parser.add_argument("--model", default=None, help="display_name か model resource。既定 kaggle-<comp>")
+- src/runner/model/pipeline.py:L34: bucket: str | None = None,
+- src/runner/model/pipeline.py:L48: bucket = bucket or project_cfg.get("gcsBucket")
+- src/runner/model/pipeline.py:L55: "project": project, "bucket": bucket, "image_uri": image_uri,
+- src/runner/model/pipeline.py:L60: output_uri = f"gs://{bucket}/runs/{competition}/{run_id}"
+- src/runner/model/pipeline.py:L61: input_uri = input_uri or f"gs://{bucket}/data/{competition}/raw"
+- src/runner/model/pipeline.py:L63: pipeline_root = f"gs://{bucket}/pipeline_root"
+- src/runner/model/pipeline.py:L120: aiplatform.init(project=project, location=region, staging_bucket=f"gs://{bucket}")
+- src/runner/model/pipeline.py:L130: print(f"[pipeline] submitted {job.resource_name}")
+- src/runner/model/pipeline.py:L131: return job.resource_name
+- src/runner/model/pipeline.py:L158: parser.add_argument("--bucket", default=None)
+- src/runner/model/pipeline.py:L170: bucket=args.bucket,
+- src/runner/model/register.py:L3: 学習成果物 `gs://<bucket>/runs/<comp>/<run_id>/model` を 1 バージョンとして登録する。
+- src/runner/model/register.py:L31: bucket: str | None = None,
+- src/runner/model/register.py:L54: bucket = bucket or project_cfg.get("gcsBucket")
+- src/runner/model/register.py:L61: "project": project, "bucket": bucket, "image_uri": image_uri,
+- src/runner/model/register.py:L66: artifact_uri = artifact_uri or f"gs://{bucket}/runs/{competition}/{run_id}/model"
+- src/runner/model/register.py:L67: cv_score = _read_cv_score(competition, run_id, bucket, project_cfg.get("output_root", "outputs/runs"))
+- src/runner/model/register.py:L119: print(f"[register] {kind} {model.resource_name}  version={model.version_id}  aliases={aliases}")
+- src/runner/model/register.py:L120: return model.resource_name
+- src/runner/model/register.py:L125: return models[0].resource_name if models else None
+- src/runner/model/register.py:L128: def _read_cv_score(competition: str, run_id: str, bucket: str, output_root: str) -> float | None:
+- src/runner/model/register.py:L133: gs = f"gs://{bucket}/runs/{competition}/{run_id}/metrics.json"
+- src/runner/model/register.py:L188: parser.add_argument("--bucket", default=None)
+- src/runner/model/register.py:L191: help="既定: gs://<bucket>/runs/<comp>/<run_id>/model")
+- src/runner/model/register.py:L208: bucket=args.bucket,
+- src/runner/ops/collect.py:L15: parser.add_argument("--bucket", default=None)
+- src/runner/ops/collect.py:L26: bucket = args.bucket or project_cfg.get("gcsBucket")
+- src/runner/ops/collect.py:L29: if not bucket:
+- src/runner/ops/collect.py:L30: raise SystemExit("[collect] bucket is required via --bucket or env/project.yaml:gcsBucket")
+- src/runner/ops/collect.py:L34: run_id = latest_run_id(bucket, competition) if args.run_id == "latest" else args.run_id
+- src/runner/ops/collect.py:L35: source = GcsPrefix(bucket=bucket, prefix=f"runs/{competition}/{run_id}")
+- src/runner/ops/costs.py:L39: "recorded_at", "service", "resource_type", "resource_id", "detail", "region",
+- src/runner/ops/costs.py:L87: "service": "aiplatform", "resource_type": "custom_job",
+- src/runner/ops/costs.py:L88: "resource_id": job["name"].split("/")[-1],
+- src/serving/predictor.py:L43: bucket_name, _, prefix = rest.partition("/")
+- src/serving/predictor.py:L45: for blob in client.list_blobs(bucket_name, prefix=prefix.rstrip("/") + "/"):
+- src/utils/artifact_store.py:L10: bucket: str
+- src/utils/artifact_store.py:L18: bucket, _, prefix = path.partition("/")
+- src/utils/artifact_store.py:L19: if not bucket:
+- src/utils/artifact_store.py:L20: raise ValueError(f"GCS URI must include bucket: {uri}")
+- src/utils/artifact_store.py:L21: return cls(bucket=bucket, prefix=prefix.strip("/"))
+- src/utils/artifact_store.py:L25: base = f"gs://{self.bucket}" + (f"/{self.prefix}" if self.prefix else "")
+- src/utils/artifact_store.py:L33: bucket = client.bucket(destination.bucket)
+- src/utils/artifact_store.py:L40: bucket.blob(blob_name).upload_from_filename(str(path))
+- src/utils/artifact_store.py:L41: uploaded.append(f"gs://{destination.bucket}/{blob_name}")
+- src/utils/artifact_store.py:L49: bucket = client.bucket(source.bucket)
+- src/utils/artifact_store.py:L52: for blob in client.list_blobs(source.bucket, prefix=source.prefix):
+- src/utils/artifact_store.py:L58: bucket.blob(blob.name).download_to_filename(str(path))
+- src/utils/artifact_store.py:L63: def latest_run_id(bucket_name: str, competition: str) -> str:
+- src/utils/artifact_store.py:L70: for blob in client.list_blobs(bucket_name, prefix=prefix)
+- src/utils/artifact_store.py:L74: raise SystemExit(f"[collect] no runs found under gs://{bucket_name}/{prefix}")

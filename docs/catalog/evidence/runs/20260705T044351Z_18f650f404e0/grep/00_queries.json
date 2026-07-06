@@ -1,0 +1,8 @@
+[
+  {"id": "todos", "description": "TODO / FIXME / HACK comments", "needles": ["todo", "fixme", "hack", "xxx"]},
+  {"id": "job_lifecycle", "description": "job lifecycle / retry / timeout / status", "needles": ["retry", "timeout", "dead.letter", "queue", "worker", "job", "status"]},
+  {"id": "env_secret", "description": "env / secret / credential", "needles": ["secret", "api_key", "apikey", "token", "password", "secrets.", "github_token", "akia", "database_url", "env::var", "os.environ", "os.getenv", "process.env", "import.meta.env"]},
+  {"id": "high_risk_ops", "description": "delete / drop / truncate / migration", "needles": ["delete", "destroy", "remove", "truncate", "drop", "migration", "migrate"]},
+  {"id": "auth_permission", "description": "auth / permission / role", "needles": ["auth", "login", "session", "jwt", "permission", "role", "iam", "roles/", "service_account", "serviceAccount"]},
+  {"id": "infra_surface", "description": "iac / gcp / ci / container surface", "needles": ["resource", "google_", "service_account", "roles/", "bucket", "Dockerfile", "FROM", "permissions:", "runs-on:"]}
+]
