@@ -26,11 +26,29 @@
 
 ## Acceptance Criteria
 
-- [ ] `make smoke CONFIG=configs/catboost_baseline.yaml` と `make train-local` が通り、oof.parquet / test_pred.parquet / fold_manifest.json が LGBM run と同じ契約で出る
+- [x] `make smoke CONFIG=configs/catboost_baseline.yaml` が通り、oof.parquet / test_pred.parquet / fold_manifest.json が LGBM run と同じ契約で出る
+- [x] `make train-local CONFIG=configs/catboost_baseline.yaml RUN_ID=cat001` が通る
 - [ ] `make train-vertex CONFIG=configs/catboost_baseline.yaml RUN_ID=cat_check` が Vertex でも完走する（イメージに catboost/xgboost を追加）
-- [ ] `make blend` が LGBM run + CatBoost run から blended submission を生成し、blend の OOF CV が単体ベストと同等以上であることを metrics.json で確認できる
-- [ ] fold_manifest 不一致の run を混ぜると明示エラーで止まる
+- [x] `make smoke CONFIG=configs/xgboost_baseline.yaml` が通り、multiclass probability を正規化した oof/test_pred/submission が出る
+- [x] `make blend` が LGBM run + CatBoost run から blended submission を生成し、blend の OOF CV が単体ベストと同等以上であることを metrics.json で確認できる
+- [x] fold_manifest 不一致の run を混ぜると明示エラーで止まる
 - 検証コマンド: `make smoke CONFIG=configs/catboost_baseline.yaml` → `make train-local CONFIG=configs/catboost_baseline.yaml RUN_ID=cat001` → `make blend RUN_IDS="full_gcp_lgbm_001 cat001" RUN_ID=blend001` → `make compare`
+
+## 2026-07-07 実装ログ
+
+- `src/runner/experiment/train.py` を `model.name: lgbm | catboost | xgboost` の dispatcher に変更。seed bagging、OOF、test_pred、submission、model manifest は共通経路で保存する。
+- `src/models/catboost_.py` / `src/models/xgboost_.py` の `train_cv` を LGBM と同じ runner signature に統一し、P0-1 の `pipelines.splits.make_splits` を共用化した。
+- `src/runner/ops/blend.py` と `make blend` を追加。`fold_manifest.json` の `valid_index_sha256` 全一致を必須にし、mean / rank_average / 2-run weight grid から OOF CV 最良候補を選ぶ。
+- `configs/catboost_baseline.yaml` / `configs/xgboost_baseline.yaml` を追加。
+- 検証済み: `py_compile`、`PYTHONPATH=src .venv/bin/python -m unittest tests.test_blend tests.test_splits`、`make smoke CONFIG=configs/catboost_baseline.yaml RUN_ID=p04_cat_smoke`、`make smoke CONFIG=configs/xgboost_baseline.yaml RUN_ID=p04_xgb_smoke`、`make smoke CONFIG=configs/lgbm_baseline.yaml RUN_ID=p04_lgbm_smoke`、`make blend CONFIG=configs/lgbm_baseline.yaml RUN_IDS="p04_lgbm_smoke p04_cat_smoke" RUN_ID=p04_blend_smoke`。
+- smoke blend 結果: `p04_blend_smoke` は `weight_grid` の `[1.0, 0.0]` を選択し、OOF logloss `0.3276377551043895`。CatBoost smoke 単体 `0.4114301546818184`、LGBM smoke 単体 `0.3276377551043895` と同等以上を確認。
+- full local 結果: `cat001` は 3 seeds × 5 folds の 15 boosters を保存し、OOF logloss `0.09465636124708839`。`oof.parquet` / `test_pred.parquet` / `fold_manifest.json` / `submission.csv` / `model/manifest.json` を確認済み。
+- full blend 結果: `blend001` は `full_gcp_lgbm_001 + cat001` から生成成功。OOF logloss `0.08668087872662794`、best weight `[1.0, 0.0]`。
+- Vertex full 結果: `make build-push` と `make stage-data CONFIG=configs/catboost_baseline.yaml` は成功。`make train-vertex CONFIG=configs/catboost_baseline.yaml RUN_ID=cat_check SYNC=--sync` は Vertex job `projects/941178142366/locations/us-central1/customJobs/8950973537221345280` を作成し、CatBoost fold 4/5 までは Cloud Logging で確認したが、`2026-07-06T17:02:56Z` 以降ログが止まり `JOB_STATE_RUNNING` のまま進捗停止したため、コスト抑止のため cancel。最終状態は `JOB_STATE_CANCELLED`。Vertex 完走は未達。
+- 追加修正: `train.py` の trained mask を `oof != 0` から fold split 由来の validation index union に変更。`metrics.json` に seed 内 `fold_scores` と `fold_score_std`、全 fold の `fold_score_mean/std` を永続化した。
+- 追加修正: `vertex_run.py` に guarded sync を追加。`--max-log-silence-minutes` と `--cancel-on-silence` で、worker log が止まった RUNNING job を自動キャンセルできる。`make train-vertex` はデフォルトで `--max-log-silence-minutes 10 --cancel-on-silence` を渡す。
+- 追加検証: `make train-vertex CONFIG=configs/catboost_baseline.yaml RUN_ID=guard_dryrun SYNC=--sync DRY=--dry-run` が job を作成せず plan 表示で終了することを確認。誤って作成された dry-run 確認用 job `projects/941178142366/locations/us-central1/customJobs/3244068384412794880` は即 cancel 済み、最終状態 `JOB_STATE_CANCELLED`。
+- 追加検証: `make smoke CONFIG=configs/catboost_baseline.yaml RUN_ID=p04_cat_guard_smoke` が成功し、`metrics.json` に fold scores が保存されることを確認。`PYTHONPATH=src .venv/bin/python -m unittest discover tests` は 9 tests OK。
 
 ## 破綻条件
 

@@ -1,12 +1,10 @@
-"""CatBoost train_cv()。lgbm.py と同じシグネチャ。"""
-import uuid
-from datetime import datetime, timezone
+"""CatBoost train_cv() with the same runner contract as models.lgbm."""
 
 import numpy as np
-from sklearn.model_selection import KFold, StratifiedKFold
 
 from config import METRIC, N_FOLDS, OBJECTIVE, SEED
 from pipelines.evaluate import cv_score
+from pipelines.splits import make_splits
 from utils.logger import log_run
 
 _LOSS_MAP = {
@@ -17,24 +15,49 @@ _LOSS_MAP = {
 
 
 def train_cv(
-    X_train, y_train, params: dict | None = None, notes: str = ""
+    X_train,
+    y_train,
+    params: dict | None = None,
+    notes: str = "",
+    *,
+    n_folds: int | None = None,
+    seed: int | None = None,
+    max_folds: int | None = None,
+    num_boost_round: int = 2000,
+    early_stopping_rounds: int = 50,
+    log_run_id: str | None = None,
+    cv_strategy: str | None = None,
+    groups=None,
 ) -> tuple[np.ndarray, list]:
     from catboost import CatBoostClassifier, CatBoostRegressor
 
+    seed = int(seed if seed is not None else SEED)
+    n_folds = int(n_folds if n_folds is not None else N_FOLDS)
     base_params = {
-        "iterations": 1000,
+        "iterations": num_boost_round,
         "learning_rate": 0.05,
         "depth": 6,
-        "early_stopping_rounds": 50,
-        "random_seed": SEED,
+        "early_stopping_rounds": early_stopping_rounds,
+        "random_seed": seed,
         "verbose": 200,
+        "allow_writing_files": False,
     }
     merged = {**base_params, **(params or {})}
 
     loss_fn = _LOSS_MAP[OBJECTIVE]
     ModelCls = CatBoostRegressor if OBJECTIVE == "regression" else CatBoostClassifier
 
-    splits = _splits(X_train, y_train)
+    splits = make_splits(
+        X_train,
+        y_train,
+        objective=OBJECTIVE,
+        strategy=cv_strategy,
+        n_folds=n_folds,
+        seed=seed,
+        groups=groups,
+    )
+    if max_folds is not None:
+        splits = splits[:max_folds]
     n_classes = int(y_train.nunique()) if OBJECTIVE == "multiclass" else 1
     oof = np.zeros((len(y_train), n_classes)) if n_classes > 1 else np.zeros(len(y_train))
     models = []
@@ -51,26 +74,22 @@ def train_cv(
         # multiclass は predict_proba で確率を取得（log_loss に必要）
         if OBJECTIVE == "multiclass":
             oof[val_idx] = model.predict_proba(X_val)
+        elif OBJECTIVE == "binary":
+            oof[val_idx] = model.predict_proba(X_val)[:, 1]
         else:
             oof[val_idx] = model.predict(X_val).flatten()
 
         score = cv_score(y_val.values, oof[val_idx])
         fold_scores.append(score)
-        print(f"  [catboost] fold {fold + 1}/{N_FOLDS}  {METRIC}={score:.5f}")
+        print(f"  [catboost] fold {fold + 1}/{len(splits)}  {METRIC}={score:.5f}")
 
-    _log(fold_scores, merged, notes)
+    _log(fold_scores, merged, notes, log_run_id=log_run_id)
     return oof, models
 
 
-def _splits(X, y):
-    if OBJECTIVE == "regression":
-        return list(KFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED).split(X))
-    return list(StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED).split(X, y))
-
-
-def _log(fold_scores, params, notes):
+def _log(fold_scores, params, notes, *, log_run_id: str | None):
     mean = float(np.mean(fold_scores))
     std = float(np.std(fold_scores))
     print(f"\n[catboost] CV {METRIC} = {mean:.5f}  (std={std:.5f})")
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_cat_" + uuid.uuid4().hex[:4]
+    run_id = log_run_id or "catboost_cv"
     log_run(run_id=run_id, cv_score=mean, params=params, notes=notes)

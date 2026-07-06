@@ -1,0 +1,31 @@
+data:
+  comp: "playground-series-s6e6"
+  target: "class"
+  id_col: "id"
+  objective: "multiclass"
+  metric: "logloss"
+
+model:
+  name: "xgboost"
+  params:
+    learning_rate: 0.05
+    max_depth: 6
+    min_child_weight: 1.0
+    subsample: 0.8
+    colsample_bytree: 0.8
+    tree_method: "hist"
+
+cv:
+  n_folds: 5
+  seed: 42
+
+seeds: [42, 777, 2026]
+
+runtime:
+  experiments_db: "data/experiments.db"
+  output_root: "outputs/runs"
+  num_boost_round: 2000
+  early_stopping_rounds: 50
+  smoke_max_folds: 1
+  smoke_n_folds: 2
+  smoke_num_boost_round: 20

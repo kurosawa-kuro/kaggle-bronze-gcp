@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -25,6 +28,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--spot", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--sync", action="store_true", help="Wait for the job to finish")
+    parser.add_argument("--poll-seconds", type=int, default=30, help="Polling interval for guarded --sync")
+    parser.add_argument("--max-log-silence-minutes", type=float, default=None,
+                        help="Cancel/fail guarded --sync when worker logs stop for this many minutes")
+    parser.add_argument("--cancel-on-silence", action="store_true",
+                        help="Cancel the Vertex job when --max-log-silence-minutes is exceeded")
     return parser.parse_args(argv)
 
 
@@ -44,6 +52,9 @@ def submit_from_config(
     smoke: bool = False,
     spot: bool = False,
     sync: bool = False,
+    poll_seconds: int = 30,
+    max_log_silence_minutes: float | None = None,
+    cancel_on_silence: bool = False,
     dry_run: bool = False,
 ) -> str | dict:
     """Build + submit one Custom Job. Non-blocking (.submit()) unless sync=True.
@@ -125,8 +136,18 @@ def submit_from_config(
     if spot:
         kwargs["scheduling_strategy"] = "SPOT"
     kwargs = {k: v for k, v in kwargs.items() if v is not None}
-    if sync:
+    if sync and max_log_silence_minutes is None:
         job.run(sync=True, **kwargs)
+    elif sync:
+        job.submit(**kwargs)
+        _watch_job(
+            project=project,
+            region=region,
+            resource_name=job.resource_name,
+            poll_seconds=poll_seconds,
+            max_log_silence_minutes=max_log_silence_minutes,
+            cancel_on_silence=cancel_on_silence,
+        )
     else:
         job.submit(**kwargs)  # 非ブロッキング: 作成して即返る（fan-out 可能）
     print(f"[vertex] submitted {job.resource_name}  -> {output_uri}")
@@ -150,6 +171,9 @@ def main(argv: list[str] | None = None) -> int:
         smoke=args.smoke,
         spot=args.spot,
         sync=args.sync,
+        poll_seconds=args.poll_seconds,
+        max_log_silence_minutes=args.max_log_silence_minutes,
+        cancel_on_silence=args.cancel_on_silence,
         dry_run=args.dry_run,
     )
     return 0
@@ -173,6 +197,97 @@ def _image_uri(project_cfg: dict, *, project: str, region: str) -> str:
     image_name = project_cfg.get("imageName", "kaggle-bronze-gcp")
     image_tag = project_cfg.get("imageTag", "latest")
     return f"{region}-docker.pkg.dev/{project}/{repo}/{image_name}:{image_tag}"
+
+
+def _watch_job(
+    *,
+    project: str,
+    region: str,
+    resource_name: str,
+    poll_seconds: int,
+    max_log_silence_minutes: float,
+    cancel_on_silence: bool,
+) -> None:
+    """Poll a Vertex job and fail fast when worker logs go stale."""
+    job_id = resource_name.rsplit("/", 1)[-1]
+    silence_seconds = max_log_silence_minutes * 60
+    print(
+        f"[vertex] guarded sync job={resource_name} "
+        f"max_log_silence={max_log_silence_minutes}m cancel={cancel_on_silence}"
+    )
+    while True:
+        state, start_time = _describe_state(project=project, region=region, job_id=job_id)
+        latest_log = _latest_worker_log_time(project=project, job_id=job_id)
+        reference = latest_log or start_time or datetime.now(timezone.utc)
+        silent_for = (datetime.now(timezone.utc) - reference).total_seconds()
+        latest_text = latest_log.isoformat() if latest_log else "none"
+        print(f"[vertex] state={state} latest_log={latest_text} silent_for={silent_for / 60:.1f}m")
+        if state == "JOB_STATE_SUCCEEDED":
+            return
+        if state in {"JOB_STATE_FAILED", "JOB_STATE_CANCELLED", "JOB_STATE_EXPIRED"}:
+            raise RuntimeError(f"Vertex job ended with {state}: {resource_name}")
+        if state == "JOB_STATE_RUNNING" and silent_for > silence_seconds:
+            message = (
+                f"Vertex job log silence exceeded {max_log_silence_minutes} minutes: "
+                f"{resource_name}"
+            )
+            if cancel_on_silence:
+                _cancel_job(project=project, region=region, job_id=job_id)
+                message += " (cancel requested)"
+            raise TimeoutError(message)
+        time.sleep(max(5, poll_seconds))
+
+
+def _describe_state(*, project: str, region: str, job_id: str) -> tuple[str, datetime | None]:
+    payload = _gcloud_json([
+        "ai", "custom-jobs", "describe", job_id,
+        "--region", region,
+        "--project", project,
+        "--format=json",
+    ])
+    return payload.get("state", "JOB_STATE_UNSPECIFIED"), _parse_ts(payload.get("startTime") or payload.get("createTime"))
+
+
+def _latest_worker_log_time(*, project: str, job_id: str) -> datetime | None:
+    result = subprocess.run(
+        [
+            "gcloud", "logging", "read",
+            f'labels."ml.googleapis.com/job_id"="{job_id}"',
+            "--project", project,
+            "--limit", "1",
+            "--format=json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    rows = json.loads(result.stdout or "[]")
+    if not rows:
+        return None
+    return _parse_ts(rows[0].get("timestamp"))
+
+
+def _cancel_job(*, project: str, region: str, job_id: str) -> None:
+    subprocess.run(
+        [
+            "gcloud", "ai", "custom-jobs", "cancel", job_id,
+            "--region", region,
+            "--project", project,
+            "--quiet",
+        ],
+        check=True,
+    )
+
+
+def _gcloud_json(args: list[str]) -> dict:
+    result = subprocess.run(["gcloud", *args], check=True, text=True, capture_output=True)
+    return json.loads(result.stdout or "{}")
+
+
+def _parse_ts(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 if __name__ == "__main__":

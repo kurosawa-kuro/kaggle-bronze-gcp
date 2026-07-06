@@ -147,7 +147,7 @@ def run(
         if dry_run:
             _write_dummy_artifacts(run_dir, cfg, run_id, competition)
         else:
-            cv = _train_lgbm(
+            cv = _train_model(
                 cfg=cfg,
                 config_path=config_path,
                 run_dir=run_dir,
@@ -165,17 +165,15 @@ def run(
     return run_dir
 
 
-def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id: str, smoke: bool) -> float:
+def _train_model(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id: str, smoke: bool) -> float:
     os.environ["KBC_CONFIG_PATH"] = str(config_path)
     from pipelines.ingest import load_data
     from pipelines.featurize import make_features
-    from pipelines.score import make_submission, predict
-    from models.lgbm import train_cv
     from pipelines.evaluate import cv_score
 
     model_cfg = cfg.get("model", {})
-    if model_cfg.get("name", "lgbm") != "lgbm":
-        raise ValueError("train.py currently supports model.name=lgbm")
+    model_name = str(model_cfg.get("name", "lgbm")).lower()
+    train_cv = _load_train_cv(model_name)
 
     cv_cfg = cfg.get("cv", {})
     runtime_cfg = cfg.get("runtime", {})
@@ -213,6 +211,7 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
     oof_per_seed: list[np.ndarray] = []
     all_models: list[Any] = []
     seed_scores: list[dict[str, Any]] = []
+    trained_masks: list[np.ndarray] = []
     for sd in seeds:
         oof_s, models_s = train_cv(
             X_train,
@@ -228,13 +227,41 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
             cv_strategy=cv_strategy,
             groups=groups,
         )
-        mask_s = _trained_mask(oof_s)
-        seed_scores.append({"seed": sd, "cv_score": cv_score(y_train.loc[mask_s].to_numpy(), oof_s[mask_s])})
+        mask_s = _trained_mask_from_splits(
+            X_train,
+            y_train,
+            objective=cfg.get("data", cfg).get("objective", "regression"),
+            cv_strategy=cv_strategy,
+            n_folds=n_folds,
+            seed=sd,
+            max_folds=max_folds,
+            groups=groups,
+        )
+        fold_scores_s = _fold_scores_from_oof(
+            X_train,
+            y_train,
+            oof_s,
+            objective=cfg.get("data", cfg).get("objective", "regression"),
+            cv_strategy=cv_strategy,
+            n_folds=n_folds,
+            seed=sd,
+            max_folds=max_folds,
+            groups=groups,
+            scorer=cv_score,
+        )
+        seed_scores.append({
+            "seed": sd,
+            "cv_score": cv_score(y_train.loc[mask_s].to_numpy(), oof_s[mask_s]),
+            "fold_scores": fold_scores_s,
+            "fold_score_std": float(np.std(fold_scores_s)) if fold_scores_s else None,
+        })
         oof_per_seed.append(oof_s)
         all_models.extend(models_s)
+        trained_masks.append(mask_s)
 
     oof = np.mean(oof_per_seed, axis=0)
-    trained_mask = _trained_mask(oof)
+    trained_mask = np.logical_or.reduce(trained_masks)
+    all_fold_scores = [score for item in seed_scores for score in item["fold_scores"]]
     metrics = {
         "run_id": run_id,
         "competition": cfg.get("data", cfg)["comp"],
@@ -244,6 +271,8 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
         "seeds": seeds,
         "n_seeds": len(seeds),
         "seed_scores": seed_scores,
+        "fold_score_mean": float(np.mean(all_fold_scores)) if all_fold_scores else None,
+        "fold_score_std": float(np.std(all_fold_scores)) if all_fold_scores else None,
         "cv_strategy": cv_strategy,
         "group_col": group_col,
         "n_folds_requested": n_folds,
@@ -264,12 +293,18 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
             metric=cfg.get("data", cfg)["metric"],
         )
 
-    # all_models は seed×fold 全モデル → predict/make_submission の平均が seed 平均になる
+    # all_models は seed×fold 全モデル → test 予測の平均が seed 平均になる
     _write_oof(run_dir / "oof.parquet", y_train, oof, trained_mask)
-    preds = predict(X_test, all_models)
+    preds = _predict_models(X_test, all_models, model_name=model_name, objective=cfg.get("data", cfg).get("objective"))
     _write_predictions(run_dir / "test_pred.parquet", preds)
     _write_feature_importance(run_dir / "feature_importance.csv", all_models, X_train.columns)
-    make_submission(X_test, all_models, out_path=run_dir / "submission.csv", original_test=test_df)
+    _write_submission_from_predictions(
+        run_dir / "submission.csv",
+        preds,
+        cfg=cfg,
+        original_test=test_df,
+        label_classes=preprocess_state.get("label_classes"),
+    )
     _write_models(run_dir / "model", all_models, meta={
         "objective": cfg.get("data", cfg).get("objective"),
         "num_class": int(oof.shape[1]) if oof.ndim > 1 else 1,
@@ -280,8 +315,75 @@ def _train_lgbm(*, cfg: dict[str, Any], config_path: Path, run_dir: Path, run_id
         "n_folds_trained": int(max_folds or n_folds),
         "feature_names": list(map(str, X_train.columns)),
         "created_at": datetime.now(timezone.utc).isoformat(),
-    }, preprocess=preprocess_state)
+    }, preprocess=preprocess_state, model_name=model_name)
     return float(metrics["cv_score"])
+
+
+def _load_train_cv(model_name: str):
+    if model_name == "lgbm":
+        from models.lgbm import train_cv
+    elif model_name == "catboost":
+        from models.catboost_ import train_cv
+    elif model_name == "xgboost":
+        from models.xgboost_ import train_cv
+    else:
+        raise ValueError(f"unsupported model.name={model_name!r}; expected lgbm, catboost, or xgboost")
+    return train_cv
+
+
+def _predict_models(
+    X_test: pd.DataFrame,
+    models: list[Any],
+    *,
+    model_name: str,
+    objective: str | None,
+) -> np.ndarray:
+    preds = [_predict_one(model, X_test, model_name=model_name, objective=objective) for model in models]
+    return np.mean(preds, axis=0)
+
+
+def _predict_one(model: Any, X_test: pd.DataFrame, *, model_name: str, objective: str | None) -> np.ndarray:
+    if model_name == "xgboost":
+        import xgboost as xgb
+
+        pred = model.predict(xgb.DMatrix(X_test))
+        if objective == "multiclass":
+            pred = np.clip(np.asarray(pred, dtype=np.float64), 0.0, 1.0)
+            row_sum = pred.sum(axis=1, keepdims=True)
+            row_sum[row_sum == 0] = 1.0
+            pred = pred / row_sum
+        return pred
+    if model_name == "catboost" and objective in {"binary", "multiclass"}:
+        proba = model.predict_proba(X_test)
+        return proba[:, 1] if objective == "binary" else proba
+    return np.asarray(model.predict(X_test))
+
+
+def _write_submission_from_predictions(
+    out_path: Path,
+    preds: np.ndarray,
+    *,
+    cfg: dict[str, Any],
+    original_test: pd.DataFrame,
+    label_classes: list[str] | None,
+) -> pd.DataFrame:
+    data_cfg = cfg.get("data", cfg)
+    objective = data_cfg.get("objective")
+    target_col = data_cfg.get("submission_target") or data_cfg.get("target", "target")
+    id_col = data_cfg.get("id_col")
+
+    if objective == "multiclass" and preds.ndim > 1 and label_classes:
+        values = [label_classes[i] for i in np.argmax(preds, axis=1)]
+    else:
+        values = preds
+
+    payload: dict[str, Any] = {target_col: values}
+    if id_col and id_col in original_test.columns:
+        payload = {id_col: original_test[id_col].to_numpy(), **payload}
+    sub = pd.DataFrame(payload)
+    sub.to_csv(out_path, index=False)
+    print(f"[score] submission saved -> {out_path}  shape={sub.shape}")
+    return sub
 
 
 def _report_hp_metric(tag: str, value: float) -> None:
@@ -366,6 +468,68 @@ def _trained_mask(oof: np.ndarray) -> np.ndarray:
     if oof.ndim == 1:
         return oof != 0
     return oof.sum(axis=1) != 0
+
+
+def _trained_mask_from_splits(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    *,
+    objective: str,
+    cv_strategy: str | None,
+    n_folds: int,
+    seed: int,
+    max_folds: int | None,
+    groups: pd.Series | None,
+) -> np.ndarray:
+    from pipelines.splits import make_splits
+
+    splits = make_splits(
+        X_train,
+        y_train,
+        objective=objective,
+        strategy=cv_strategy,
+        n_folds=n_folds,
+        seed=seed,
+        groups=groups,
+    )
+    if max_folds is not None:
+        splits = splits[:max_folds]
+    mask = np.zeros(len(y_train), dtype=bool)
+    for _, valid_idx in splits:
+        mask[valid_idx] = True
+    return mask
+
+
+def _fold_scores_from_oof(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    oof: np.ndarray,
+    *,
+    objective: str,
+    cv_strategy: str | None,
+    n_folds: int,
+    seed: int,
+    max_folds: int | None,
+    groups: pd.Series | None,
+    scorer,
+) -> list[float]:
+    from pipelines.splits import make_splits
+
+    splits = make_splits(
+        X_train,
+        y_train,
+        objective=objective,
+        strategy=cv_strategy,
+        n_folds=n_folds,
+        seed=seed,
+        groups=groups,
+    )
+    if max_folds is not None:
+        splits = splits[:max_folds]
+    scores: list[float] = []
+    for _, valid_idx in splits:
+        scores.append(float(scorer(y_train.iloc[valid_idx].to_numpy(), oof[valid_idx])))
+    return scores
 
 
 def _write_oof(path: Path, y_train: pd.Series, oof: np.ndarray, trained_mask: np.ndarray) -> None:
@@ -514,7 +678,14 @@ def _write_leakage_audit(
     })
 
 
-def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any], preprocess: dict[str, Any] | None = None) -> None:
+def _write_models(
+    model_dir: Path,
+    models: list[Any],
+    *,
+    meta: dict[str, Any],
+    preprocess: dict[str, Any] | None = None,
+    model_name: str = "lgbm",
+) -> None:
     """学習済み booster を保存（Vertex Model Registry 登録 = runner.model.register の成果物）。
 
     seed×fold の全 booster を保存し、推論は全 booster の平均（pipelines.score.predict と同じ）。
@@ -524,12 +695,12 @@ def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any], p
     saved: list[str] = []
     for i, model in enumerate(models):
         if hasattr(model, "save_model"):
-            fname = f"booster_{i:03d}.txt"
+            fname = _model_filename(model_name, i)
             model.save_model(str(model_dir / fname))
             saved.append(fname)
     manifest = {
-        "model_type": "lightgbm-seedbag",
-        "framework": "lightgbm",
+        "model_type": f"{model_name}-seedbag",
+        "framework": model_name,
         "n_boosters": len(saved),
         "boosters": saved,
         "predict": "mean over boosters (proba for classification)",
@@ -541,6 +712,16 @@ def _write_models(model_dir: Path, models: list[Any], *, meta: dict[str, Any], p
         (model_dir / "preprocess.json").write_text(
             json.dumps(preprocess, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[train] saved {len(saved)} boosters -> {model_dir}")
+
+
+def _model_filename(model_name: str, index: int) -> str:
+    if model_name == "lgbm":
+        return f"booster_{index:03d}.txt"
+    if model_name == "catboost":
+        return f"model_{index:03d}.cbm"
+    if model_name == "xgboost":
+        return f"model_{index:03d}.json"
+    return f"model_{index:03d}.bin"
 
 
 def _schema_hash(df: pd.DataFrame) -> str:
@@ -562,6 +743,14 @@ def _write_feature_importance(path: Path, models: list[Any], feature_names: pd.I
     for model in models:
         if hasattr(model, "feature_importance"):
             importances.append(model.feature_importance())
+        elif hasattr(model, "get_feature_importance"):
+            importances.append(model.get_feature_importance())
+        elif hasattr(model, "get_score"):
+            scores = model.get_score(importance_type="gain")
+            values = []
+            for idx, name in enumerate(map(str, feature_names)):
+                values.append(float(scores.get(name, scores.get(f"f{idx}", 0.0))))
+            importances.append(values)
     if importances:
         values = np.mean(importances, axis=0)
         df = pd.DataFrame({"feature": feature_names, "importance": values}).sort_values("importance", ascending=False)

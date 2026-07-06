@@ -25,7 +25,7 @@
 | 4 | [P0-2 package-kernel](2026-07-06-p0-2-package-kernel.md) | ✅ 2026-07-06 | **P0-0 完了必須**（持込方式が決まる） | 1〜2日 |
 | 随時 | [P0-3 提出台帳](2026-07-06-p0-3-submissions-ledger.md) | ✅ 2026-07-06 | なし。**初回提出前までに** | 0.5日 |
 | 5 | [P0-E ROGII directory adapter](2026-07-06-p0-e-rogii-directory-adapter.md) | ✅ 2026-07-06 | P0-0 + P0-1 + P0-2 | 0.5〜1日 |
-| 6 | [P0-4 マルチモデル + blend](2026-07-06-p0-4-multimodel-blend.md) | 未着手 | P0-A + P0-1 | 2〜3日 |
+| 6 | [P0-4 マルチモデル + blend](2026-07-06-p0-4-multimodel-blend.md) | 進行中 2026-07-07（local smoke / blend 実装済み） | P0-A + P0-1 | 2〜3日 |
 
 ### ノート未作成の P0 候補（P0-0 の結果で作成判断）
 
@@ -64,10 +64,11 @@
 
 | # | 対象 | 内容 | 優先度 |
 |---|------|------|--------|
-| 1 | `src/models/catboost_.py:1` | 嘘 docstring「lgbm.py と同じシグネチャ」の修正（P0-4 で解消予定） | P0-4 内 |
+| 1 | `src/models/catboost_.py:1` | 嘘 docstring「lgbm.py と同じシグネチャ」の修正 | ✅ 2026-07-07 |
 | 2 | `scripts/init_competition.py` | `conf/config.yaml` 表記 drift（正は `env/`） | P1 init 強化内 |
-| 3 | `src/runner/experiment/train.py:_trained_mask` | `oof != 0` の未学習判定を fold index ベースに | 低 |
-| 4 | `metrics.json` | fold 別スコア・std の永続化（stdout のみ） | P0-3 とセット |
+| 3 | `src/runner/experiment/train.py:_trained_mask` | `oof != 0` の未学習判定を fold index ベースに | ✅ 2026-07-07 |
+| 4 | `metrics.json` | fold 別スコア・std の永続化（stdout のみ） | ✅ 2026-07-07 |
+| 5 | `src/runner/experiment/vertex_run.py` | Vertex full が RUNNING のまま進捗停止した時の guarded sync / auto-cancel | ✅ 2026-07-07 |
 
 ## 運用ルール
 

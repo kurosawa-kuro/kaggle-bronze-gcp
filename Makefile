@@ -1,4 +1,4 @@
-.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-input batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy package-kernel lb-sync stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
+.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-input batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy package-kernel lb-sync stage-data cost cost-record cost-notify sweep tune hp-tune compare blend terraform-init terraform-plan
 
 VENV   := .venv
 PYTHON := $(VENV)/bin/python
@@ -22,6 +22,8 @@ IMAGE ?= $(REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(AR_REPO)/$(IMAGE_NAME):$(IMAG
 SERVING_IMAGE ?= $(REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(AR_REPO)/$(IMAGE_NAME)-serving:$(IMAGE_TAG)
 # overnight バッチ既定で Spot（約1/3以下）。on-demand にするには: make train-vertex SPOT=
 SPOT ?= --spot
+VERTEX_MAX_LOG_SILENCE_MINUTES ?= 10
+VERTEX_CANCEL_ON_SILENCE ?= --cancel-on-silence
 
 # 初期セットアップ: venv 作成 + 依存インストール
 setup:
@@ -61,9 +63,10 @@ gcp-bootstrap:
 stage-data:
 	gcloud storage cp --recursive data/$(COMP_DATA)/raw gs://$(GCS_BUCKET)/data/$(COMP_DATA)/
 
-# Submit the same train.py contract to Vertex Custom Job (Spot by default)
+# Submit the same train.py contract to Vertex Custom Job (Spot by default).
+# Wait for completion with: make train-vertex SYNC=--sync
 train-vertex:
-	$(PYRUN) runner.experiment.vertex_run --config $(CONFIG) --run-id $(RUN_ID) --image-uri $(IMAGE) $(SPOT)
+	$(PYRUN) runner.experiment.vertex_run --config $(CONFIG) --run-id $(RUN_ID) --image-uri $(IMAGE) $(SPOT) $(SYNC) $(DRY) --max-log-silence-minutes $(VERTEX_MAX_LOG_SILENCE_MINUTES) $(VERTEX_CANCEL_ON_SILENCE)
 
 # Optuna 探索（1マシン）。best params を run_id 成果物に保存。N_TRIALS / FINAL=--final
 # make tune CONFIG=configs/lgbm_baseline.yaml RUN_ID=tune01 N_TRIALS=30
@@ -127,6 +130,11 @@ cost:
 # Compare experiments and cost estimates from BigQuery
 compare:
 	$(PYRUN) runner.ops.compare --project-config $(PROJECT_CONFIG) $(if $(COMP),--competition $(COMP),) $(if $(RUN_LIKE),--run-like "$(RUN_LIKE)",) $(if $(LIMIT),--limit $(LIMIT),)
+
+# Blend compatible OOF/test predictions. Example:
+# make blend CONFIG=configs/lgbm_baseline.yaml RUN_IDS="lgbm001 cat001" RUN_ID=blend001
+blend:
+	$(PYRUN) runner.ops.blend --config $(CONFIG) --run-ids $(RUN_IDS) --run-id $(RUN_ID)
 
 # Push the month-to-date cost summary to Discord (webhook in env/secret.yaml)
 cost-notify:
