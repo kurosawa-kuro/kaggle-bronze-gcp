@@ -21,6 +21,8 @@ wc -l outputs/runs/<competition>/<run_id>/submission.csv
 - [ ] `dataset_snapshot.json` / `fold_manifest.json` / `leakage_audit.json` が存在し、`leakage_audit.json` に重大 warning がない
 - [ ] Vertex 実行の場合は `make collect CONFIG=<cfg> RUN_ID=<id>` 済み
 - [ ] Vertex 実行の場合は必要に応じて `make cost-record CONFIG=<cfg> RUN_ID=<id>` 済み
+- [ ] GCP 推論まで検証する run は `make batch-input` / `make register-servable` / `make batch-predict` 済み
+- [ ] Vertex Batch Prediction の `successful_count` が test 件数と一致している
 
 ## 最終提出の選択（2本戦略）
 
@@ -63,6 +65,29 @@ make build-push
 make train-vertex CONFIG=configs/<competition>_lgbm_baseline.yaml RUN_ID=exp001
 make collect CONFIG=configs/<competition>_lgbm_baseline.yaml RUN_ID=exp001
 ```
+
+GCP 上で訓練・評価・推論まで確認する場合:
+
+```bash
+make cost-record CONFIG=configs/<competition>_lgbm_baseline.yaml RUN_ID=exp001
+make compare RUN_LIKE='exp001%' LIMIT=20
+make build-push-serving
+make batch-input CONFIG=configs/<competition>_lgbm_baseline.yaml RUN_ID=exp001
+make register-servable CONFIG=configs/<competition>_lgbm_baseline.yaml RUN_ID=exp001
+make batch-predict CONFIG=configs/<competition>_lgbm_baseline.yaml RUN_ID=exp001 \
+  SRC=gs://<bucket>/batch_input/<competition>/exp001/instances.jsonl
+```
+
+実績値の参照:
+
+| 項目 | 値 |
+|---|---|
+| run_id | `full_gcp_lgbm_001` |
+| Custom Job | `projects/941178142366/locations/us-central1/customJobs/5462847664892674048` |
+| CV | `0.08668087872662794` |
+| Model Registry | `projects/941178142366/locations/us-central1/models/3101590910316576768@1` |
+| Batch Prediction | `projects/941178142366/locations/us-central1/batchPredictionJobs/8231488312376819712` |
+| successful_count | `247435` |
 
 ## GCP リソース後始末
 

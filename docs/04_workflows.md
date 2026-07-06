@@ -91,6 +91,26 @@ make cost
 make compare
 ```
 
+実証済み full GCP run:
+
+```bash
+# 2026-07-06 実機検証済み
+PYTHONPATH=src .venv/bin/python -m runner.experiment.vertex_run \
+  --config configs/lgbm_baseline.yaml \
+  --run-id full_gcp_lgbm_001 \
+  --image-uri us-central1-docker.pkg.dev/mlops-dev-a/kaggle/kaggle-bronze-gcp:latest \
+  --machine-type n2-standard-16 \
+  --service-account kaggle-bronze-vertex@mlops-dev-a.iam.gserviceaccount.com \
+  --sync
+# => CustomJob projects/941178142366/locations/us-central1/customJobs/5462847664892674048
+# => JOB_STATE_SUCCEEDED
+# => aggregate cv_score=0.08668087872662794
+
+make collect CONFIG=configs/lgbm_baseline.yaml RUN_ID=full_gcp_lgbm_001
+make cost-record CONFIG=configs/lgbm_baseline.yaml RUN_ID=full_gcp_lgbm_001
+make compare RUN_LIKE='full_gcp_lgbm_001%' LIMIT=20
+```
+
 ## 複数 config の並列 sweep
 
 ```bash
@@ -190,9 +210,28 @@ make batch-predict CONFIG=configs/lgbm_baseline.yaml RUN_ID=bp01 \
   SRC=gs://<bucket>/batch_input/instances.jsonl DRY=--dry-run   # まず dry-run
 ```
 
-- 推論器（`/health` `/predict`）はローカル Docker で実証済み。`make register-servable` 無しの
+- `make batch-input CONFIG=<cfg> RUN_ID=<id>` で現在の test set から Vertex Batch Prediction 用 JSONL を作り、GCS へ upload する。
+- 推論器（`/health` `/predict`）はローカル Docker と Vertex Batch Prediction 実 job の両方で実証済み。`make register-servable` 無しの
   プレースホルダ登録モデルは Batch には使えない。
 - Endpoint（オンライン）は Batch と推論コンテナを共用する（下記）。
+
+実証済み full GCP batch prediction:
+
+```bash
+make batch-input CONFIG=configs/lgbm_baseline.yaml RUN_ID=full_gcp_lgbm_001
+# => gs://mlops-dev-a-kaggle-bronze-runs/batch_input/playground-series-s6e6/full_gcp_lgbm_001/instances.jsonl
+
+make register-servable CONFIG=configs/lgbm_baseline.yaml RUN_ID=full_gcp_lgbm_001
+# => projects/941178142366/locations/us-central1/models/3101590910316576768@1
+
+PYTHONPATH=src .venv/bin/python -m runner.model.batch_predict \
+  --config configs/lgbm_baseline.yaml \
+  --run-id full_gcp_lgbm_001 \
+  --gcs-source gs://mlops-dev-a-kaggle-bronze-runs/batch_input/playground-series-s6e6/full_gcp_lgbm_001/instances.jsonl \
+  --machine-type n1-standard-4
+# => BatchPredictionJob projects/941178142366/locations/us-central1/batchPredictionJobs/8231488312376819712
+# => JOB_STATE_SUCCEEDED / successful_count=247435
+```
 
 ## オンライン推論（Vertex Endpoint）⚠️常駐コスト
 

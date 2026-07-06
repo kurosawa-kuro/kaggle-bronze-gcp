@@ -3,13 +3,34 @@
 ## 方針
 
 Kaggle パイプラインはノートブックファーストで速く回すことが優先。  
-ユニットテストは最小限にとどめ、**`make run` が通ること**を最低品質ゲートとする。
+ユニットテストは最小限にとどめ、通常開発では **`make smoke` が通ること**を最低品質ゲートとする。GCP 経路を触った場合は Vertex Custom Job / BigQuery / GCS 回収まで確認し、推論コンテナや Model Registry を触った場合は Vertex Batch Prediction まで確認する。
 
 ## 品質ゲート
 
 ```bash
-make run    # エラーなく完了し、submission.csv が生成されること
-make logs   # 実験ログが記録されていること
+make smoke CONFIG=configs/lgbm_baseline.yaml RUN_ID=smoke_check
+make logs
+make compare
+```
+
+GCP 経路を変更した場合:
+
+```bash
+make stage-data
+make build-push
+make train-vertex CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id>
+make collect CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id>
+make cost-record CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id>
+make compare RUN_LIKE='<run_id>%' LIMIT=20
+```
+
+推論経路を変更した場合:
+
+```bash
+make build-push-serving
+make batch-input CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id>
+make register-servable CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id>
+make batch-predict CONFIG=configs/lgbm_baseline.yaml RUN_ID=<run_id> SRC=gs://<bucket>/batch_input/<comp>/<run_id>/instances.jsonl
 ```
 
 ## CV スコアによる品質判断
@@ -24,10 +45,21 @@ make logs   # 実験ログが記録されていること
 
 | 範囲 | 手段 | 備考 |
 |---|---|---|
-| パイプライン結合 | `make run` | エラーなく完了すること |
+| パイプライン結合 | `make smoke` | エラーなく完了し、run_id 成果物が生成されること |
 | モデル切り替え | `make nb NB=exp002_catboost_base` | 同様にエラーなく完了すること |
 | 実験ログ記録 | `make logs` | run_id と cv_score が記録されていること |
 | FE 追加 | `make run` 後に CV Score を比較 | スコアが改善または維持されること |
+| GCP 訓練・評価 | `make train-vertex` + `make collect` + `make compare` | Vertex job が `JOB_STATE_SUCCEEDED`、BQ と成果物が揃うこと |
+| GCP 推論 | `make batch-predict` | Batch Prediction が `JOB_STATE_SUCCEEDED`、`successful_count` が test 件数と一致すること |
+
+## 実証済み E2E ベースライン
+
+2026-07-06 に `full_gcp_lgbm_001` で GCP フル検証済み。
+
+- Vertex Custom Job: `projects/941178142366/locations/us-central1/customJobs/5462847664892674048`
+- CV: `0.08668087872662794`
+- Vertex Batch Prediction: `projects/941178142366/locations/us-central1/batchPredictionJobs/8231488312376819712`
+- Batch successful_count: `247435`
 
 ## タスク完了条件
 

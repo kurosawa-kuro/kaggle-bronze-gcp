@@ -31,9 +31,10 @@ def submit_batch(
     machine_type: str | None = None,
     instances_format: str = "jsonl",
     predictions_format: str = "jsonl",
+    sync: bool = False,
     dry_run: bool = False,
 ) -> str | dict:
-    """登録済みモデルで Batch Prediction を非ブロッキング投入する。dry_run 時は plan を返す。"""
+    """登録済みモデルで Batch Prediction を投入する。dry_run 時は plan を返す。"""
     project_cfg = _load_yaml(Path(project_config))
     train_cfg = _load_yaml(Path(config_path))
     data_cfg = train_cfg.get("data", train_cfg)
@@ -90,10 +91,12 @@ def submit_batch(
         instances_format=instances_format,
         predictions_format=predictions_format,
         machine_type=machine_type,
-        sync=False,  # 非ブロッキング投入
+        sync=sync,
     )
-    print(f"[batch] submitted {job.resource_name}  -> {gcs_destination}")
-    return job.resource_name
+    resource_name = _resource_name(job)
+    action = "completed" if sync else "submitted"
+    print(f"[batch] {action} {resource_name}  -> {gcs_destination}")
+    return resource_name
 
 
 def _label_value(value: str) -> str:
@@ -104,6 +107,17 @@ def _load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _resource_name(job) -> str:
+    try:
+        return job.resource_name
+    except RuntimeError:
+        pass
+
+    resource = getattr(job, "_gca_resource", None) or getattr(job, "gca_resource", None)
+    name = getattr(resource, "name", "") if resource else ""
+    return name or "(resource creation in progress)"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gcs-source", default=None, help="instances jsonl の gs://...（必須）")
     parser.add_argument("--gcs-destination", default=None)
     parser.add_argument("--machine-type", default=None)
+    parser.add_argument("--sync", action="store_true", help="ジョブ完了まで待機する")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -132,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         gcs_source=args.gcs_source,
         gcs_destination=args.gcs_destination,
         machine_type=args.machine_type,
+        sync=args.sync,
         dry_run=args.dry_run,
     )
     return 0

@@ -25,8 +25,8 @@ Feature Store を「常駐コスト・運用増だけで実験スループット
 - Vertex AI Custom Job（学習投入。既存）
 - Vertex AI Hyperparameter Tuning / Vizier（既存）
 - **Vertex AI Model Registry**（学習済みモデルの版・alias 管理）← 実装済み（`src/runner/model/register.py` / `make register-model` / `make register-servable`。`kaggle-<comp>` に版を積む。serving image 付き登録も可能）
-- **Vertex AI Pipelines (KFP)** ← 実装済み（`src/runner/model/pipeline.py` / `make pipeline`。既存イメージで `train` → `register` の粗い DAG。compile 検証済み、実 run は image 再 push 前提。ingest/featurize/train/score の細分化は GCS 往復が増えるため不採用）
-- **Vertex AI Batch Prediction**（バッチ推論）← 実装済み（`infra/Dockerfile.serving` + `src/serving/predictor.py` の推論コンテナ、`src/runner/model/batch_predict.py` / `make batch-predict`。推論器はローカル Docker 実証済み、実 job は serving image push 前提。`make register-servable` で実 serving 付き登録）
+- **Vertex AI Pipelines (KFP)** ← 実装済み（`src/runner/model/pipeline.py` / `make pipeline`。既存イメージで `train` → `register` の粗い DAG。compile / submit 経路実装済み。ingest/featurize/train/score の細分化は GCS 往復が増えるため不採用）
+- **Vertex AI Batch Prediction**（バッチ推論）← 実装済み（`infra/Dockerfile.serving` + `src/serving/predictor.py` の推論コンテナ、`src/runner/model/batch_predict.py` / `make batch-predict`。`make register-servable` で実 serving 付き登録。2026-07-06 に `full_gcp_lgbm_001` で実 job 全件推論成功済み）
 - Endpoint / Model Monitoring（配信・監視。⚠️常駐コスト系。下記コスト方針で監視し、邪魔なら最初に削る）← Endpoint は **deploy/teardown コードのみ実装**（`src/runner/model/deploy.py` / `make endpoint-deploy`・`endpoint-teardown`、dry-run 検証済み）。常駐コストのため実デプロイは手動・任意。Monitoring は稼働 Endpoint 前提のため未実装
 
 ### 2. データ/メタデータの正本は BigQuery に統一（Vertex 内で動く Python client）
@@ -65,3 +65,16 @@ tabular なメタデータ（実験 run・HP trial・sweep 結果・コスト）
 - `CLAUDE.md` の「本番 MLOps 水準の設計は持ち込まない」を撤回し、「非DL Vertex 機能はフル活用」に置換。
   **DL / GPU / LLM / RAG を持ち込まない方針は維持**（LightGBM 主軸）。
 - 実験記録は SQLite (`src/utils/logger.py`) を廃し、BigQuery `kaggle_ops.experiments` へ移す。
+
+## Verification
+
+2026-07-06 に `run_id=full_gcp_lgbm_001` で、フル GCP 経路を検証済み。
+
+- Terraform: `infra/terraform plan` = `No changes`
+- Vertex Custom Job: `projects/941178142366/locations/us-central1/customJobs/5462847664892674048`、`JOB_STATE_SUCCEEDED`
+- aggregate CV: `0.08668087872662794`
+- BigQuery: `kaggle_ops.experiments` に seed run と aggregate run を記録、`cost_estimates` と `make compare` で JOIN 済み
+- GCS/local artifacts: `outputs/runs/playground-series-s6e6/full_gcp_lgbm_001/` に回収済み
+- Vertex Model Registry: `projects/941178142366/locations/us-central1/models/3101590910316576768@1`
+- Vertex Batch Prediction: `projects/941178142366/locations/us-central1/batchPredictionJobs/8231488312376819712`、`JOB_STATE_SUCCEEDED`
+- Batch Prediction successful_count: `247435`

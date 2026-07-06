@@ -193,12 +193,46 @@ Vertex 実行時は `gs://<bucket>/runs/<competition>/<run_id>/` に同じ内容
 - Vertex Hyperparameter Tuning: Vizier HPO
 - Vertex Model Registry: run モデルの版管理 / lineage（`make register-model`）と serving image 付き登録（`make register-servable`）
 - Vertex Pipelines (KFP): `train` → `register` の DAG（`make pipeline`。compile 検証済み、実 run は image 再 push が前提）
-- Vertex Batch Prediction: 推論コンテナ（`infra/Dockerfile.serving`）で登録したモデルにバッチ推論（`make batch-predict`。推論器はローカル Docker 実証済み、実 job は serving image push が前提）
+- Vertex Batch Prediction: 推論コンテナ（`infra/Dockerfile.serving`）で登録したモデルにバッチ推論（`make batch-predict`。`full_gcp_lgbm_001` で実 job 全件推論成功済み）
 - Vertex Endpoint: servable モデルのオンライン推論（`make endpoint-deploy` / `endpoint-teardown`）。⚠️常駐コストのため**コードのみ実装・自動デプロイしない**設計
 - BigQuery: experiments / cost_estimates
 - Cloud Billing Budget: 実請求ガードレール
 
 Custom Job / HP Tuning / Model Registry / Pipelines / Batch Prediction / Endpoint(deploy コード) まで実装済み。Endpoint の実デプロイと Monitoring は常駐コスト・稼働 Endpoint 前提のため意図的に未実行（ADR 0002 の「邪魔なら最初に削る」側。Kaggle ブロンズでは基本不要）。推論コンテナは Batch / Endpoint 共用。
+
+## GCP E2E 検証済み経路
+
+2026-07-06 に `run_id=full_gcp_lgbm_001` で、Terraform 管理済み基盤上の訓練・評価・推論を実機完走済み。
+
+```
+local Makefile
+  │
+  ├─ make stage-data
+  │     └─ GCS raw data staging
+  │
+  ├─ Vertex Custom Job
+  │     └─ projects/941178142366/locations/us-central1/customJobs/5462847664892674048
+  │        JOB_STATE_SUCCEEDED
+  │        aggregate cv_score=0.08668087872662794
+  │
+  ├─ make collect / cost-record / compare
+  │     ├─ outputs/runs/playground-series-s6e6/full_gcp_lgbm_001/
+  │     └─ BigQuery kaggle_ops.experiments + cost_estimates
+  │
+  ├─ make register-servable
+  │     └─ projects/941178142366/locations/us-central1/models/3101590910316576768@1
+  │
+  └─ Vertex Batch Prediction
+        └─ projects/941178142366/locations/us-central1/batchPredictionJobs/8231488312376819712
+           JOB_STATE_SUCCEEDED
+           successful_count=247435
+```
+
+Batch output:
+
+```text
+gs://mlops-dev-a-kaggle-bronze-runs/batch_predict/playground-series-s6e6/full_gcp_lgbm_001/prediction-kaggle-playground-series-s6e6-2026_07_06T05_05_28_831Z
+```
 
 ## 境界・注意
 
