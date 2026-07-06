@@ -14,6 +14,7 @@ _runtime = _cfg.get("runtime", {})
 COMP: str = _cfg.get("comp") or _data["comp"]
 
 TARGET: str = _cfg.get("target") or _data["target"]
+SUBMISSION_TARGET: str = _cfg.get("submission_target") or _data.get("submission_target") or TARGET
 ID_COL: str | None = _cfg.get("id_col", _data.get("id_col"))
 OBJECTIVE: str = _cfg.get("objective") or _data["objective"]   # regression / binary / multiclass
 METRIC: str = _cfg.get("metric") or _data["metric"]             # rmse / auc / logloss / mape

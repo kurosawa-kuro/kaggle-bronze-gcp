@@ -33,6 +33,7 @@ nested schema:
 data:
   comp: "playground-series-s6e6"
   target: "class"
+  submission_target: "class"
   id_col: "id"
   objective: "multiclass"
   metric: "logloss"
@@ -63,6 +64,7 @@ runtime:
 補足:
 
 - `runner.experiment.train` は full run では `seeds` を横断し、OOF / test prediction / feature importance を平均する。
+- `submission_target` は提出CSVの目的変数列名。未指定なら `target` と同じ。ROGII の `TVT` → `tvt` のような表記差を吸収する。
 - smoke では `cv.seed` 単発。
 - `cv.strategy` は `kfold` / `stratified` / `group`。未指定なら従来互換で `objective` から自動選択する。
 - `cv.strategy: group` では `cv.group_col` が必須。fold_manifest に group overlap 検査を保存し、overlap があれば学習を止める。

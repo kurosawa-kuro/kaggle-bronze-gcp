@@ -23,16 +23,17 @@
 | 2 | [P0-A config 単一正本化](2026-07-06-p0-a-config-single-source.md) | ✅ 2026-07-06 | なし（P0-0 と並行可） | 1日 |
 | 3 | [P0-1 CV strategy config 駆動化](2026-07-06-p0-1-cv-strategy-config.md) | ✅ 2026-07-06 | P0-A（group_col は P0-0） | 1〜2日 |
 | 4 | [P0-2 package-kernel](2026-07-06-p0-2-package-kernel.md) | ✅ 2026-07-06 | **P0-0 完了必須**（持込方式が決まる） | 1〜2日 |
-| 随時 | [P0-3 提出台帳](2026-07-06-p0-3-submissions-ledger.md) | 未着手 | なし。**初回提出前までに** | 0.5日 |
-| 5 | [P0-4 マルチモデル + blend](2026-07-06-p0-4-multimodel-blend.md) | 未着手 | P0-A + P0-1 | 2〜3日 |
+| 随時 | [P0-3 提出台帳](2026-07-06-p0-3-submissions-ledger.md) | ✅ 2026-07-06 | なし。**初回提出前までに** | 0.5日 |
+| 5 | [P0-E ROGII directory adapter](2026-07-06-p0-e-rogii-directory-adapter.md) | ✅ 2026-07-06 | P0-0 + P0-1 + P0-2 | 0.5〜1日 |
+| 6 | [P0-4 マルチモデル + blend](2026-07-06-p0-4-multimodel-blend.md) | 未着手 | P0-A + P0-1 | 2〜3日 |
 
 ### ノート未作成の P0 候補（P0-0 の結果で作成判断）
 
 | 候補 | 発動条件 |
 |---|---|
 | P0-C: metric registry + 方向一元化（tune/hp_tune/compare の3重複解消） | ROGII の指標が rmse/auc/logloss 以外なら**即 P0**。該当しなくても P1 上位 |
-| P0-D: sample_submission 正本化 + submission_contract.json | ROGII は `id,tvt` の単純列だが、hidden test 置換型の Notebook 提出なので P0-E とセットで `sample_submission.csv` 正本化を実装する |
-| P0-E: ROGII directory adapter | ROGII 初回提出前。`train/*.csv` / `test/*.csv` から `well_id` と sample row を組み立て、package kernel の標準CSV前提へ接続する |
+| P0-D: sample_submission 正本化 + submission_contract.json | ✅ P0-E内で `submission_target` と `sample_submission.csv` 順序正本化を実装済み |
+| P0-E: ROGII directory adapter | ✅ `train/*.csv` / `test/*.csv` から `well_id` と sample row を組み立て、runner/package kernel に接続済み |
 
 ## P1 キュー（ROGII 参戦後〜2週目）
 

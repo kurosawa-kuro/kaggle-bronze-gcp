@@ -264,7 +264,13 @@ make cost-notify
 
 ```bash
 make submit CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001_lgbm MSG="exp001 lgbm baseline"
+make lb-sync CONFIG=configs/lgbm_baseline.yaml
+make compare CONFIG=configs/lgbm_baseline.yaml COMP=<competition-slug>
 ```
+
+- `submit` は message に `[run_id=<run_id>]` を自動付与し、成功時に BigQuery `kaggle_ops.submissions` へ記録する。
+- `lb-sync` は Kaggle の提出履歴から public/private LB を同期する。
+- `compare` は CV / public LB / private LB / GCP概算コストを run_id 単位で並べる。
 
 Code Competition の推論専用 package / Notebook 生成:
 

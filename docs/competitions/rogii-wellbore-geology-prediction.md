@@ -145,13 +145,22 @@ P0-2 引き渡し:
 
 | run_id | モデル | CV Score | 変更内容 | 備考 |
 |---|---|---:|---|---|
-|  |  |  | ベースライン | P0-2 で初回Notebook提出後に記録 |
+| rogii_adapter_smoke | LGBM | 184.86839178738845 | directory adapter smoke | `data.train_row_limit=200000`、1 fold smoke。提出可能性確認用 |
 
 ## 提出記録
 
 | 日付 | run_id | CV Score | Public LB | 備考 |
 |---|---|---:|---:|---|
 |  |  |  |  | 初提出前 |
+
+## 実装済み adapter
+
+- `src/competitions/rogii.py` が `train/*.csv` / `test/*.csv` / `sample_submission.csv` から tabular runner 入力を生成する。
+- train は `TVT_input` が NaN の target zone だけを使い、`TVT` を目的変数にする。
+- test は `sample_submission.csv` の `id` 順を正本にし、`id`, `well_id`, `row_index` を生成する。
+- `cv.group_col: well_id` により同一wellがtrain/validにまたがらない。
+- `submission_target: tvt` により、学習target `TVT` と提出列 `tvt` のズレを吸収する。
+- `make package-kernel CONFIG=configs/rogii_lgbm_baseline.yaml RUN_ID=rogii_adapter_smoke` で生成した推論scriptは、ローカル隔離実行で runner 出力submissionと完全一致済み。
 
 ## 調査コマンド
 

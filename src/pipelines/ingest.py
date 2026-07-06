@@ -1,11 +1,15 @@
 """Bronze → Silver: データロードと基本エンコーディング。
 Kaggle コンペ転用時は load_data() だけ差し替える。
 """
+import os
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+import yaml
 from sklearn.preprocessing import OrdinalEncoder
 
-from config import DATA_INTERIM, DATA_RAW, TARGET
+from config import COMP, DATA_INTERIM, DATA_RAW, TARGET
 
 
 def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -15,6 +19,9 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     2. data/<comp>/raw/train.csv があれば Kaggle CSV モード
     3. いずれもなければ California Housing（練習用）
     """
+    if COMP == "rogii-wellbore-geology-prediction" or _is_rogii_dir(DATA_RAW):
+        return _load_rogii()
+
     if (DATA_INTERIM / "train.parquet").exists():
         return (
             pd.read_parquet(DATA_INTERIM / "train.parquet"),
@@ -52,6 +59,34 @@ def _load_california_housing() -> tuple[pd.DataFrame, pd.DataFrame]:
     test_df.to_parquet(DATA_INTERIM / "test.parquet", index=False)
     print(f"[ingest] California Housing: train={len(train_df)}  test={len(test_df)}")
     return train_df, test_df
+
+
+def _load_rogii() -> tuple[pd.DataFrame, pd.DataFrame]:
+    from competitions.rogii import load_data as load_rogii_data
+
+    limits = _loader_limits()
+    train_df, test_df = load_rogii_data(
+        DATA_RAW,
+        train_row_limit=limits.get("train_row_limit"),
+        test_row_limit=limits.get("test_row_limit"),
+    )
+    print(f"[ingest] ROGII directory: train={len(train_df)}  test={len(test_df)}")
+    return train_df, test_df
+
+
+def _is_rogii_dir(raw_dir: Path) -> bool:
+    return (raw_dir / "train").is_dir() and (raw_dir / "test").is_dir() and (raw_dir / "sample_submission.csv").exists()
+
+
+def _loader_limits() -> dict[str, int | None]:
+    path = Path(os.environ.get("KBC_CONFIG_PATH", "env/config.yaml"))
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data_cfg = (cfg or {}).get("data", {})
+    out: dict[str, int | None] = {}
+    for key in ("train_row_limit", "test_row_limit"):
+        value = data_cfg.get(key)
+        out[key] = int(value) if value is not None else None
+    return out
 
 
 def encode(

@@ -42,12 +42,45 @@ def load_config(package_dir: Path) -> dict:
 
 def load_test(data_dir: Path) -> pd.DataFrame:
     test_csv = data_dir / "test.csv"
-    if not test_csv.exists():
-        raise FileNotFoundError(
-            f"{test_csv} not found. This generated script currently supports standard CSV competitions. "
-            "Directory-style competitions need a competition adapter."
-        )
-    return pd.read_csv(test_csv)
+    if test_csv.exists():
+        return pd.read_csv(test_csv)
+    if (data_dir / "test").is_dir() and (data_dir / "sample_submission.csv").exists():
+        return load_rogii_test(data_dir)
+    raise FileNotFoundError(f"{test_csv} not found and no supported directory adapter matched {data_dir}")
+
+
+def load_rogii_test(data_dir: Path) -> pd.DataFrame:
+    sample = pd.read_csv(data_dir / "sample_submission.csv")
+    rows = []
+    for sub_id in sample["id"].astype(str):
+        well_id, row_index = parse_rogii_id(sub_id)
+        rows.append((sub_id, well_id, row_index))
+    by_well = {}
+    for sub_id, well_id, row_index in rows:
+        by_well.setdefault(well_id, []).append(row_index)
+
+    frames = []
+    for well_id, row_indexes in by_well.items():
+        path = data_dir / "test" / f"{well_id}__horizontal_well.csv"
+        if not path.exists():
+            raise FileNotFoundError(path)
+        df = pd.read_csv(path)
+        df.insert(0, "row_index", df.index.astype(int))
+        df.insert(0, "well_id", well_id)
+        df.insert(0, "id", [f"{well_id}_{idx}" for idx in df["row_index"]])
+        selected = df.set_index("row_index").loc[row_indexes].reset_index()
+        frames.append(selected[["id", "well_id", "row_index", "MD", "X", "Y", "Z", "GR", "TVT_input"]])
+    out = pd.concat(frames, ignore_index=True)
+    order = {sub_id: i for i, sub_id in enumerate(sample["id"].astype(str))}
+    out["_sample_order"] = out["id"].map(order)
+    return out.sort_values("_sample_order").drop(columns=["_sample_order"]).reset_index(drop=True)
+
+
+def parse_rogii_id(submission_id: str) -> tuple[str, int]:
+    well_id, sep, row = submission_id.rpartition("_")
+    if not sep:
+        raise ValueError(f"invalid ROGII submission id: {submission_id}")
+    return well_id, int(row)
 
 
 def apply_preprocessor(X: pd.DataFrame, state: dict) -> pd.DataFrame:
@@ -85,7 +118,14 @@ def predict(model_dir: Path, X: pd.DataFrame) -> np.ndarray:
 
 def make_submission(cfg: dict, test_df: pd.DataFrame, preds: np.ndarray, output: Path, preprocess: dict) -> pd.DataFrame:
     data_cfg = cfg.get("data", cfg)
-    target = cfg.get("target") or data_cfg.get("target") or preprocess.get("target") or "target"
+    target = (
+        cfg.get("submission_target")
+        or data_cfg.get("submission_target")
+        or cfg.get("target")
+        or data_cfg.get("target")
+        or preprocess.get("target")
+        or "target"
+    )
     id_col = cfg.get("id_col", data_cfg.get("id_col", preprocess.get("id_col")))
     objective = cfg.get("objective") or data_cfg.get("objective") or "regression"
     label_classes = preprocess.get("label_classes")

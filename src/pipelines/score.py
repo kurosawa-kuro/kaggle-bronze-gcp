@@ -6,7 +6,7 @@ import pandas as pd
 
 import pipelines.featurize as _featurize
 
-from config import ID_COL, OBJECTIVE, TARGET
+from config import ID_COL, OBJECTIVE, SUBMISSION_TARGET, TARGET
 
 
 def predict(X_test: pd.DataFrame, models: list) -> np.ndarray:
@@ -25,9 +25,9 @@ def make_submission(
     # multiclass: argmax で class インデックスを取り、元のラベル名に戻す
     if OBJECTIVE == "multiclass" and _featurize.LABEL_CLASSES is not None:
         pred_labels = [_featurize.LABEL_CLASSES[i] for i in np.argmax(preds, axis=1)]
-        target_col = {TARGET: pred_labels}
+        target_col = {SUBMISSION_TARGET: pred_labels}
     else:
-        target_col = {TARGET: preds}
+        target_col = {SUBMISSION_TARGET: preds}
 
     # ID列: original_test → X_test の順に探す
     id_vals = None

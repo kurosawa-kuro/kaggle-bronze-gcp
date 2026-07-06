@@ -1,4 +1,4 @@
-.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-input batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy package-kernel stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
+.PHONY: setup run nb logs clean init download submit smoke train-local train-vertex collect register-model register-servable pipeline build-push build-push-serving batch-input batch-predict endpoint-deploy endpoint-teardown gcp-bootstrap submit-legacy package-kernel lb-sync stage-data cost cost-record cost-notify sweep tune hp-tune compare terraform-init terraform-plan
 
 VENV   := .venv
 PYTHON := $(VENV)/bin/python
@@ -153,12 +153,16 @@ download:
 
 # Kaggle 提出: make submit CONFIG=configs/lgbm_baseline.yaml RUN_ID=exp001 MSG="exp001 lgbm baseline"
 submit:
-	doppler run -- sh -c 'KAGGLE_API_TOKEN="$$ML_KAGGLE_TOKEN" PYTHONPATH=src $(PYTHON) -m runner.ops.submit --config $(CONFIG) --run-id $(RUN_ID) --message "$(MSG)"'
+	doppler run --project kuro-dev-k --config dev -- sh -c 'KAGGLE_API_TOKEN="$$ML_KAGGLE_TOKEN" PYTHONPATH=src $(PYTHON) -m runner.ops.submit --config $(CONFIG) --run-id $(RUN_ID) --message "$(MSG)"'
 
 # Code Competition 用の推論専用 package/notebook 生成。
 # Kaggle Dataset まで publish する場合: make package-kernel ... PACKAGE_ARGS="--create-dataset"
 package-kernel:
 	doppler run --project kuro-dev-k --config dev -- sh -c 'KAGGLE_API_TOKEN="$$ML_KAGGLE_TOKEN" PYTHONPATH=src $(PYTHON) -m runner.ops.package_kernel --config $(CONFIG) --run-id $(RUN_ID) $(PACKAGE_ARGS)'
+
+# Kaggle submissions 履歴を BigQuery kaggle_ops.submissions に同期
+lb-sync:
+	doppler run --project kuro-dev-k --config dev -- sh -c 'KAGGLE_API_TOKEN="$$ML_KAGGLE_TOKEN" PYTHONPATH=src $(PYTHON) -m runner.ops.lb_sync --config $(CONFIG) $(if $(COMP),--competition $(COMP),)'
 
 # 旧提出経路: repository root の submission.csv を直接提出
 submit-legacy:
