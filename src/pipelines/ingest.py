@@ -1,6 +1,7 @@
 """Bronze → Silver: データロードと基本エンコーディング。
 Kaggle コンペ転用時は load_data() だけ差し替える。
 """
+import json
 import os
 from pathlib import Path
 
@@ -23,6 +24,7 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
         return _load_rogii()
 
     if (DATA_INTERIM / "train.parquet").exists():
+        _assert_interim_cache_current()
         return (
             pd.read_parquet(DATA_INTERIM / "train.parquet"),
             pd.read_parquet(DATA_INTERIM / "test.parquet"),
@@ -41,6 +43,7 @@ def _load_from_csv() -> tuple[pd.DataFrame, pd.DataFrame]:
     DATA_INTERIM.mkdir(parents=True, exist_ok=True)
     train_df.to_parquet(DATA_INTERIM / "train.parquet", index=False)
     test_df.to_parquet(DATA_INTERIM / "test.parquet", index=False)
+    _write_interim_metadata()
     print(f"[ingest] Kaggle CSV: train={len(train_df)}  test={len(test_df)}")
     return train_df, test_df
 
@@ -57,6 +60,7 @@ def _load_california_housing() -> tuple[pd.DataFrame, pd.DataFrame]:
     DATA_INTERIM.mkdir(parents=True, exist_ok=True)
     train_df.to_parquet(DATA_INTERIM / "train.parquet", index=False)
     test_df.to_parquet(DATA_INTERIM / "test.parquet", index=False)
+    _write_interim_metadata()
     print(f"[ingest] California Housing: train={len(train_df)}  test={len(test_df)}")
     return train_df, test_df
 
@@ -87,6 +91,37 @@ def _loader_limits() -> dict[str, int | None]:
         value = data_cfg.get(key)
         out[key] = int(value) if value is not None else None
     return out
+
+
+def _interim_metadata() -> dict[str, str]:
+    return {
+        "version": "1",
+        "competition": str(COMP),
+        "target": str(TARGET),
+        "raw_dir": str(DATA_RAW.resolve()),
+    }
+
+
+def _write_interim_metadata() -> None:
+    (DATA_INTERIM / "_metadata.json").write_text(
+        json.dumps(_interim_metadata(), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _assert_interim_cache_current() -> None:
+    path = DATA_INTERIM / "_metadata.json"
+    if not path.exists():
+        print(f"[ingest] interim cache metadata missing; using legacy cache: {DATA_INTERIM}")
+        return
+    cached = json.loads(path.read_text(encoding="utf-8"))
+    expected = _interim_metadata()
+    mismatches = {
+        key: {"cached": cached.get(key), "expected": value}
+        for key, value in expected.items()
+        if str(cached.get(key)) != str(value)
+    }
+    if mismatches:
+        raise ValueError(f"stale interim cache: {DATA_INTERIM} metadata mismatch {mismatches}")
 
 
 def encode(

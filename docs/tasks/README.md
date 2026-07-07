@@ -46,11 +46,11 @@
 
 ## Active
 
-active task は現在 1 件。P0 系列（ROGII 参戦準備、マルチモデル + blend、Vertex full 完走）はすべて完了し、証跡は `done/` に移動済み。
+active task は現在 0 件。P0 系列（ROGII 参戦準備、マルチモデル + blend、Vertex full 完走）と複数コンペ切替コスト削減 task は完了し、証跡は `done/` に移動済み。
 
 | ファイル | 用途 |
 |---|---|
-| [active/2026-07-07_multi-competition-switching-hardening.md](active/2026-07-07_multi-competition-switching-hardening.md) | 複数コンペ切替コスト削減アーキテクチャ実装 |
+| なし | 進行中タスクなし |
 
 完了済みの主要仕様は `docs/01_requirements.md`〜`docs/08_release_runbook.md` と `docs/adr/` に昇格済み。完了 task の証跡は `done/` に置く。
 

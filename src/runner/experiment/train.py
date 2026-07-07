@@ -367,21 +367,16 @@ def _write_submission_from_predictions(
     original_test: pd.DataFrame,
     label_classes: list[str] | None,
 ) -> pd.DataFrame:
-    data_cfg = cfg.get("data", cfg)
-    objective = data_cfg.get("objective")
-    target_col = data_cfg.get("submission_target") or data_cfg.get("target", "target")
-    id_col = data_cfg.get("id_col")
+    from pipelines.score import write_submission_from_predictions
 
-    if objective == "multiclass" and preds.ndim > 1 and label_classes:
-        values = [label_classes[i] for i in np.argmax(preds, axis=1)]
-    else:
-        values = preds
-
-    payload: dict[str, Any] = {target_col: values}
-    if id_col and id_col in original_test.columns:
-        payload = {id_col: original_test[id_col].to_numpy(), **payload}
-    sub = pd.DataFrame(payload)
-    sub.to_csv(out_path, index=False)
+    sub = write_submission_from_predictions(
+        out_path,
+        preds,
+        cfg=cfg,
+        original_test=original_test,
+        label_classes=label_classes,
+        contract_path=out_path.with_name("submission_contract.json"),
+    )
     print(f"[score] submission saved -> {out_path}  shape={sub.shape}")
     return sub
 
@@ -444,6 +439,20 @@ def _write_dummy_artifacts(run_dir: Path, cfg: dict[str, Any], run_id: str, comp
     pd.DataFrame({"row_id": [0], "prediction": [0.0]}).to_parquet(run_dir / "test_pred.parquet", index=False)
     pd.DataFrame({"feature": [], "importance": []}).to_csv(run_dir / "feature_importance.csv", index=False)
     pd.DataFrame({"id": [0], "target": [0.0]}).to_csv(run_dir / "submission.csv", index=False)
+    _write_json(run_dir / "submission_contract.json", {
+        "version": 1,
+        "fallback": True,
+        "sample_path": None,
+        "sample_sha256": None,
+        "columns": ["id", "target"],
+        "row_count": 1,
+        "target_columns": ["target"],
+        "id_col": cfg.get("data", cfg).get("id_col"),
+        "objective": cfg.get("data", cfg).get("objective"),
+        "competition": competition,
+        "output_path": str(run_dir / "submission.csv"),
+        "dry_run": True,
+    })
     _write_json(run_dir / "dataset_snapshot.json", {
         "run_id": run_id,
         "competition": competition,

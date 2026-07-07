@@ -213,20 +213,23 @@ def _write_prediction_frame(path: Path, pred: np.ndarray, *, target: np.ndarray 
 
 
 def _write_submission(path: Path, pred: np.ndarray, *, cfg: dict[str, Any], source_dir: Path) -> None:
-    data_cfg = cfg.get("data", cfg)
+    from pipelines.score import build_submission_frame
+
     source_sub = pd.read_csv(source_dir / "submission.csv")
-    target_col = data_cfg.get("submission_target") or data_cfg.get("target", "target")
-    id_col = data_cfg.get("id_col")
-    if data_cfg.get("objective") == "multiclass" and pred.ndim > 1:
-        labels = _read_label_classes(source_dir)
-        values = [labels[i] for i in np.argmax(pred, axis=1)] if labels else np.argmax(pred, axis=1)
-    else:
-        values = pred
-    out: dict[str, Any] = {}
-    if id_col and id_col in source_sub.columns:
-        out[id_col] = source_sub[id_col].to_numpy()
-    out[target_col] = values
-    pd.DataFrame(out).to_csv(path, index=False)
+    sub, contract = build_submission_frame(
+        pred,
+        cfg=cfg,
+        original_test=source_sub,
+        label_classes=_read_label_classes(source_dir),
+        sample=source_sub,
+        sample_path=source_dir / "submission.csv",
+    )
+    sub.to_csv(path, index=False)
+    contract["output_path"] = str(path)
+    contract["source_submission_path"] = str(source_dir / "submission.csv")
+    (path.parent / "submission_contract.json").write_text(
+        json.dumps(contract, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def _read_label_classes(source_dir: Path) -> list[str] | None:

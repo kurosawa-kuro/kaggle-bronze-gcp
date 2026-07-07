@@ -64,13 +64,13 @@ outputs/runs/<comp>/<run_id>/
 
 ## Plan
 
-1. `score.py` / `train.py` / `blend.py` / `package_kernel.py` の提出生成経路を洗い出し、`sample_submission.csv` を読める共通 adapter 境界を決める。
-2. `sample_submission.csv` がある場合は列名・列順・行数を正本にし、ない場合だけ従来の `id_col + submission_target` にフォールバックする。
-3. run artifact に `submission_contract.json` を出力する。最低限、sample path、sample sha256、列名、行数、target columns、fallback 有無を記録する。
-4. ROGII directory adapter と generic CSV の両方で submission 生成テストを追加する。
-5. feature registry の最小設計を作り、`features: ["base"]` を config に足しても既存挙動が変わらない状態を作る。
-6. BigQuery compare の JOIN と submission ledger のキーを確認し、同一 run_id が別 competition に存在しても混ざらないテストを追加する。
-7. interim cache の stale 条件を定義し、schema mismatch 時に明示エラーか再生成へ倒す。
+1. ✅ `score.py` / `train.py` / `blend.py` / `package_kernel.py` の提出生成経路を洗い出し、`sample_submission.csv` を読める共通 adapter 境界を決める。
+2. ✅ `sample_submission.csv` がある場合は列名・列順・行数を正本にし、ない場合だけ従来の `id_col + submission_target` にフォールバックする。
+3. ✅ run artifact に `submission_contract.json` を出力する。最低限、sample path、sample sha256、列名、行数、target columns、fallback 有無を記録する。
+4. ✅ ROGII directory adapter と generic CSV の両方で submission 生成テストを追加する。
+5. ✅ feature registry の最小設計を作り、`features: ["base"]` を config に足しても既存挙動が変わらない状態を作る。
+6. ✅ BigQuery compare の JOIN と submission ledger のキーを確認し、同一 run_id が別 competition に存在しても混ざらないテストを追加する。
+7. ✅ interim cache の stale 条件を定義し、schema mismatch 時に明示エラーか再生成へ倒す。
 8. 実装が安定したら、この task を `done/` に移し、確定仕様を `docs/02_architecture.md` または runbook へ昇格する。
 
 ## Acceptance Criteria
@@ -91,6 +91,13 @@ outputs/runs/<comp>/<run_id>/
 PYTHONPATH=src .venv/bin/python -m unittest discover tests
 PYTHONPATH=src .venv/bin/python -m py_compile src/pipelines/score.py src/runner/experiment/train.py src/runner/ops/blend.py src/runner/ops/package_kernel.py
 ```
+
+2026-07-07:
+
+- ✅ `PYTHONPATH=src .venv/bin/python -m unittest discover tests`（19 tests）
+- ✅ `PYTHONPATH=src .venv/bin/python -m py_compile src/pipelines/score.py src/runner/experiment/train.py src/runner/ops/blend.py src/runner/ops/package_kernel.py src/pipelines/ingest.py src/pipelines/featurize.py src/features/__init__.py`
+- ✅ `PYTHONPATH=src .venv/bin/python -m runner.experiment.train --config configs/lgbm_baseline.yaml --run-id multi_comp_contract_dry --dry-run`
+- ✅ `outputs/runs/playground-series-s6e6/multi_comp_contract_dry/submission_contract.json` 生成確認
 
 必要に応じて追加する。
 

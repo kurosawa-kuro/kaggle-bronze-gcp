@@ -42,9 +42,9 @@ src/
     predictor.py          # Vertex 推論コンテナ本体（LightGBM seed-bag, stdlib HTTP）
   pipelines/
     ingest.py             # load_data() + encode()
-    featurize.py          # make_features()
-    evaluate.py           # cv_score()
-    score.py              # predict() / make_submission()
+    featurize.py          # make_features() + feature registry 適用
+    evaluate.py           # cv_score() + metric registry
+    score.py              # predict() / sample_submission 正本の make_submission()
   models/
     lgbm.py
     catboost_.py
@@ -133,7 +133,7 @@ models.lgbm.train_cv()
 | `src/runner/experiment/tune.py` | Optuna による単一マシン HPO。`best_params.json`, `best_config.yaml`, `trials.csv` を生成 |
 | `src/runner/experiment/hp_tune.py` | Vertex Hyperparameter Tuning（Vizier）を投入 |
 | `src/runner/ops/costs.py` | Vertex Custom Job の start/end と machine type から概算コストを BigQuery に記録 |
-| `src/runner/ops/compare.py` | BigQuery `experiments` と `cost_estimates` を run_id で比較 |
+| `src/runner/ops/compare.py` | BigQuery `experiments` / `cost_estimates` / `submissions` を `(competition, run_id)` で比較 |
 | `src/runner/model/register.py` | `gs://<bucket>/runs/<comp>/<run_id>/model` を Vertex Model Registry に登録。`kaggle-<comp>` に版を積む（`latest` alias）。`--serving-image` で Batch / Endpoint 用の serving 付き登録も行う |
 | `src/runner/model/pipeline.py` | Vertex Pipelines (KFP v2)。既存イメージを container component にして `train` → `register` の DAG を compile + 投入。`--dry-run` で compile のみ |
 | `src/runner/model/batch_predict.py` | 登録モデル（`--serving-image` 付き）に対し Vertex Batch Prediction を投入。`--dry-run` で plan のみ |
@@ -144,6 +144,16 @@ models.lgbm.train_cv()
 | `src/utils/logger.py` | CV 結果を BigQuery `<bqDataset>.experiments` に記録。失敗しても学習は止めない |
 | `src/utils/artifact_store.py` | GCS prefix と local directory の 1:1 upload/download |
 | `src/utils/bq.py` | `google-cloud-bigquery` Python client 経由の最小 BigQuery helper |
+
+## 複数コンペ切替契約
+
+新コンペで編集してよい既定の入口は `configs/<comp>_baseline.yaml` と `docs/competitions/<comp>.md`。generic CSV と `sample_submission.csv` で表現できない場合のみ `src/competitions/<comp>.py` を escape hatch として追加する。
+
+- `features: ["base"]` を既定とし、特徴量セットは `src/features/__init__.py` の registry から選ぶ。
+- `sample_submission.csv` がある場合、提出生成は sample の列名・列順・行数を正本にする。
+- `sample_submission.csv` がない場合だけ、従来の `id_col + submission_target` 形式へフォールバックする。
+- interim cache は `_metadata.json` の `competition` / `target` / `raw_dir` が現 config と一致する場合だけ再利用する。
+- BigQuery の比較・費用・提出履歴 JOIN は、コンペ跨ぎの同名 run_id 混線を避けるため `(competition, run_id)` をキーにする。
 
 ## run_id 成果物契約
 
@@ -160,6 +170,7 @@ outputs/runs/<competition>/<run_id>/
   fold_manifest.json
   leakage_audit.json
   submission.csv
+  submission_contract.json  # sample path / sha256 / columns / row_count / target_columns
   log.txt
   model/
     booster_NNN.txt       # seed×fold の全 booster

@@ -16,6 +16,8 @@ model:
     lambda_l1: 1.918585
     lambda_l2: 1.0e-8
 
+features: ["base"]
+
 cv:
   n_folds: 5
   seed: 42

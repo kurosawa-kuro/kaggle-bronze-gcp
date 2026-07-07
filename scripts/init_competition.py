@@ -132,6 +132,7 @@ def analyze(train_path: Path, test_path: Path) -> dict:
                 "bagging_fraction": 0.8,
             },
         },
+        "features": ["base"],
         "cv": {
             "n_folds": 5,
             "seed": 42,

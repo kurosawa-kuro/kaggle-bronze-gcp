@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -116,7 +117,7 @@ def predict(model_dir: Path, X: pd.DataFrame) -> np.ndarray:
     return np.mean([booster.predict(X) for booster in boosters], axis=0)
 
 
-def make_submission(cfg: dict, test_df: pd.DataFrame, preds: np.ndarray, output: Path, preprocess: dict) -> pd.DataFrame:
+def make_submission(cfg: dict, test_df: pd.DataFrame, preds: np.ndarray, output: Path, preprocess: dict, data_dir: Path) -> pd.DataFrame:
     data_cfg = cfg.get("data", cfg)
     target = (
         cfg.get("submission_target")
@@ -135,13 +136,76 @@ def make_submission(cfg: dict, test_df: pd.DataFrame, preds: np.ndarray, output:
     else:
         target_values = preds
 
-    if id_col and id_col in test_df.columns:
+    sample_path = data_dir / "sample_submission.csv"
+    if sample_path.exists():
+        sub = pd.read_csv(sample_path)
+        if len(sub) != len(target_values):
+            raise ValueError(f"sample_submission row count mismatch: sample={len(sub)} preds={len(target_values)}")
+        if id_col and id_col in sub.columns:
+            target_cols = [col for col in sub.columns if col != id_col]
+        elif target in sub.columns:
+            target_cols = [target]
+        else:
+            target_cols = list(sub.columns[1:]) if len(sub.columns) > 1 else list(sub.columns)
+        if not target_cols:
+            raise ValueError("sample_submission has no target columns")
+        if len(target_cols) == 1:
+            sub[target_cols[0]] = target_values
+        else:
+            arr = np.asarray(target_values)
+            if arr.ndim != 2 or arr.shape[1] != len(target_cols):
+                raise ValueError(f"prediction shape does not match sample target columns: preds={arr.shape} targets={len(target_cols)}")
+            for idx, col in enumerate(target_cols):
+                sub[col] = arr[:, idx]
+        contract = {
+            "version": 1,
+            "fallback": False,
+            "sample_path": str(sample_path),
+            "sample_sha256": sha256(sample_path),
+            "columns": list(map(str, sub.columns)),
+            "row_count": int(len(sub)),
+            "target_columns": list(map(str, target_cols)),
+            "id_col": id_col,
+            "objective": objective,
+        }
+    elif id_col and id_col in test_df.columns:
         sub = pd.DataFrame({id_col: test_df[id_col].values, target: target_values})
+        contract = {
+            "version": 1,
+            "fallback": True,
+            "sample_path": None,
+            "sample_sha256": None,
+            "columns": list(map(str, sub.columns)),
+            "row_count": int(len(sub)),
+            "target_columns": [target],
+            "id_col": id_col,
+            "objective": objective,
+        }
     else:
         sub = pd.DataFrame({target: target_values})
+        contract = {
+            "version": 1,
+            "fallback": True,
+            "sample_path": None,
+            "sample_sha256": None,
+            "columns": list(map(str, sub.columns)),
+            "row_count": int(len(sub)),
+            "target_columns": [target],
+            "id_col": id_col,
+            "objective": objective,
+        }
     sub.to_csv(output, index=False)
+    (output.parent / "submission_contract.json").write_text(json.dumps(contract, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[kernel] submission saved -> {output} shape={sub.shape}")
     return sub
+
+
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def main() -> int:
@@ -161,7 +225,7 @@ def main() -> int:
         X_test = X_test.drop(columns=[id_col])
     X_test = apply_preprocessor(X_test, preprocess)
     preds = predict(model_dir, X_test)
-    make_submission(cfg, test_df, preds, Path(args.output), preprocess)
+    make_submission(cfg, test_df, preds, Path(args.output), preprocess, data_dir)
     return 0
 
 
