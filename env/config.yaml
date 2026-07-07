@@ -15,6 +15,3 @@ metric: "logloss"           # rmse / auc / logloss / mape
 # --- 学習 ---
 n_folds: 5
 seed: 42
-
-# --- パス（comp から自動導出。変更不要）---
-experiments_db: "data/experiments.db"  # 全コンペ共通

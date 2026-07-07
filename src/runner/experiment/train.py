@@ -473,12 +473,6 @@ def _write_dummy_artifacts(run_dir: Path, cfg: dict[str, Any], run_id: str, comp
     print("[train] dry-run artifacts written")
 
 
-def _trained_mask(oof: np.ndarray) -> np.ndarray:
-    if oof.ndim == 1:
-        return oof != 0
-    return oof.sum(axis=1) != 0
-
-
 def _trained_mask_from_splits(
     X_train: pd.DataFrame,
     y_train: pd.Series,

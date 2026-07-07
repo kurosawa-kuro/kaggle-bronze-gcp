@@ -26,6 +26,7 @@ env/secret.*.yaml
 # コンペごとのサブフォルダ構造: data/<comp>/raw|interim|features/
 data/*/
 submission.csv
+catboost_info/
 
 # Logs
 *.log

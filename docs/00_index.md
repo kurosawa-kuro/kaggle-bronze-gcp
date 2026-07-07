@@ -44,6 +44,10 @@ Kaggle ブロンズ取得を目的とした LightGBM 主軸・表形式データ
 | ドキュメント | 内容 |
 |---|---|
 | [competitions/_template.md](./competitions/_template.md) | 新コンペ参加時のテンプレート |
+| [competitions/rogii-wellbore-geology-prediction.md](./competitions/rogii-wellbore-geology-prediction.md) | **現フェーズの主戦場**。ROGII ルール・提出制約・スコア履歴 |
 | [competitions/california_housing.md](./competitions/california_housing.md) | パイプライン検証用（練習データ）・スコア履歴 |
+| [competitions/titanic.md](./competitions/titanic.md) | 練習コンペ記録 |
+| [competitions/stellar-class/README.md](./competitions/stellar-class/README.md) | stellar-class 記録（規約外のディレクトリ形式。次回更新時に `<slug>.md` へ揃える） |
+| [competitions/データ取得方法.md](./competitions/データ取得方法.md) | Kaggle データ取得手順メモ |
 
 新コンペに参加するときは `_template.md` をコピーして `competitions/<competition-slug>.md` を作成する。
