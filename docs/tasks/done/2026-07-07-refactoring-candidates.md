@@ -56,8 +56,8 @@
 | 7 | `catboost_info/` | CatBoost 生成物の untrack + gitignore 追加 | ✅ 2026-07-07 |
 | 8 | `SPEC.md` / `env/config.yaml` | gcp-bootstrap 記述 drift 修正、dead key `experiments_db` 削除 | ✅ 2026-07-07 |
 | 9 | `docs/00_index.md` | コンペ別記録テーブルに ROGII ほか4件を追加 | ✅ 2026-07-07 |
-| 10 | `docs/catalog/` | 2026-07-05 生成の evidence pack が stale。再生成 or リポ外し（starter-kit 側 check-drift 運用と要調整） | 未 |
-| 11 | `src/ports.py` | importer ゼロ。Protocol 適合を isinstance テストで実測するか、削除するか | 未 |
+| 10 | `docs/catalog/` | 2026-07-05 生成の stale evidence pack をリポジトリから削除 | ✅ 2026-07-07 |
+| 11 | `src/ports.py` | importer ゼロかつ dead spec のため削除。実契約は trainer signature / feature registry / tests を正とする | ✅ 2026-07-07 |
 
 ## 運用ルール
 

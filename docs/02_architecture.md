@@ -19,7 +19,6 @@ scripts/
   init_competition.py
 src/
   config.py               # flat / nested config を定数化。KBC_CONFIG_PATH 対応
-  ports.py                # 軽量 Protocol
   runner/                 # 責務別サブパッケージ（python -m runner.<group>.<name>）
     run.py                # 旧 `make run` の実体（legacy）
     experiment/           # 学習・探索を「回す」
@@ -186,15 +185,6 @@ Vertex 実行時は `gs://<bucket>/runs/<competition>/<run_id>/` に同じ内容
 
 これにより config 追加・変更だけなら Docker image の rebuild は不要。`src/` や依存を変えた場合のみ `make build-push` が必要。
 runner 経路では `--config` / `--config-b64` が data セクションを含む正本であり、`env/config.yaml` は legacy `make run` / notebooks の既定値としてのみ扱う。GCS staging / ingest / featurize / metric / BigQuery logger は runner 開始時に `KBC_CONFIG_PATH` を config path へ固定してから import する。
-
-## Protocol
-
-`src/ports.py` は軽量なインタフェース定義のみを持つ。DI container や adapter 層は持たない。
-
-- `ModelTrainer`: `train_cv(X_train, y_train, params, notes) -> tuple[np.ndarray, list]`
-- `FeatureTransformer`: `pd.DataFrame -> pd.DataFrame`
-
-現実の `models.lgbm.train_cv` は runner 用に optional keyword（`n_folds`, `seed`, `max_folds`, `num_boost_round`, `log_run_id` 等）を追加している。
 
 ## GCP 境界
 

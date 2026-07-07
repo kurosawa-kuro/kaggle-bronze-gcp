@@ -71,7 +71,7 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 | 9 | `src/pipelines/evaluate.py` / `src/runner/experiment/tune.py` / `src/runner/experiment/hp_tune.py` / `src/runner/ops/compare.py` / `src/runner/ops/blend.py` | ✅ 2026-07-07 解消済み。metric 関数と maximize/minimize 判定を `evaluate.py` の registry に一元化し、Optuna / Vertex HPT / compare / blend が参照する | metric 追加時の修正点を registry 1箇所に縮小し、HPO 逆最適化と比較順序ミスを防止 |
 | 10 | `src/pipelines/splits.py` / `src/models/lgbm.py` / `src/models/catboost_.py` / `src/models/xgboost_.py` | ✅ 2026-07-07 解消済み。CV 分割は `pipelines.splits.make_splits` に一本化 | cv.strategy 追加時にモデルごとの重複修正を避ける |
 | 11 | `src/models/catboost_.py` / `src/models/xgboost_.py` | ✅ 2026-07-07 解消済み。runner signature を LGBM と統一 | P0-4 のマルチモデル統合と Vertex 実行契約に接続済み |
-| 12 | `src/ports.py:26-34` | `FeatureTransformer` は存在しない `features/base.py` を参照。`features/stellar.py` の `add_stellar_fe(X_train, X_test)->tuple` は Protocol `__call__(X)->DataFrame` に不適合 | 「全コードが適合済み」という自己申告が偽の dead spec。registry 設計時に実態へ合わせて書き直すか削除 |
+| 12 | `src/ports.py` | ✅ 2026-07-07 解消済み。importer ゼロかつ dead spec のため削除 | 実契約は trainer signature / feature registry / tests を正とし、未使用 Protocol による誤誘導を排除 |
 | 13 | `scripts/init_competition.py` | ✅ 2026-07-07 解消済み。runner 用 `configs/<comp>_baseline.yaml` を生成し、現行 `make smoke` / `make train-local` を案内する | 新コンペ初日の手作業とミスを削減 |
 | 14 | `src/runner/ops/compare.py` | ✅ 2026-07-07 解消済み。experiments / cost_estimates / submissions は `(competition, run_id)` で JOIN | コンペ跨ぎの同名 run_id で比較・費用・提出履歴が混ざらない |
 | 15 | `src/serving/predictor.py` | P0-2 で `model/preprocess.json` 永続化は完了。serving predictor の生配列前提は Endpoint/Batch 用の将来整理対象 | Kaggle ブロンズ主経路は package kernel / batch input で前処理を再現するため、常駐 Endpoint 優先度は低い |
@@ -94,7 +94,7 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 - **P0-D: sample_submission 正本化 + submission_contract.json**（✅ 2026-07-07 実装済み。`score.py` 共通 adapter、train/blend/package_kernel 対応、contract 永続化）
 - 既存 P0-0（ルール確認）/ P0-2（package-kernel）/ P0-3（提出台帳）/ P0-4（マルチモデル+blend）は維持。ただし P0-4 は catboost シグネチャ統一を含むためコスト再見積もり（2〜3日）
 - **P1**: init の `configs/<comp>_baseline.yaml` 自動生成（✅）/ FE registry（✅ 最小導入）/ BQ JOIN に competition 追加（✅）/ interim cache の stale 検知（✅）/ cfg 明示渡しへの段階移行（LABEL_CLASSES 排除を含む、未実施）
-- **P2**: `src/competitions/` escape hatch（ROGII の loader が特殊と判明した時だけ）/ ports.py の実態合わせ or 削除 / run.py・notebooks の legacy 退役 / init_competition の `conf/` 表記修正
+- **P2**: `src/competitions/` escape hatch（ROGII の loader が特殊と判明した時だけ）/ ports.py 削除（✅）/ run.py・notebooks の legacy 退役 / init_competition の `conf/` 表記修正
 - **やらない**: 5責務フル CompetitionPlugin / YAML 変数展開 / cache config_hash 化 / ExperimentConfig 一括全面書換え / （従来どおり）Endpoint 常駐・Monitoring・Feature Store・KFP 細分化・分散 Optuna
 
 ## 7. 改善案ごとの表
@@ -200,5 +200,5 @@ outputs/runs/<comp>/<run_id>/   # 現行契約 + preprocess.json + submission_co
 1. Vertex 経路の config 無視（セクション4 #2）— **最重要・新規**
 2. metric 方向の3重複実装（#9）— HPO 逆最適化リスク
 3. BQ JOIN の run_id 衝突（#14）— 複数コンペ蓄積後に顕在化
-4. catboost_.py の嘘 docstring（#11）と ports.py の dead spec（#12）— 見積もりと保守の罠
+4. ✅ catboost_.py の嘘 docstring（#11）と ports.py の dead spec（#12）は 2026-07-07 に解消済み
 5. ✅ init_competition の旧 config 表記 drift（#13）は 2026-07-07 に解消済み
