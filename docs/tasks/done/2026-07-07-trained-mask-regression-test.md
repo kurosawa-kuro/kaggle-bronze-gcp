@@ -17,14 +17,26 @@ fold index ベースの未学習判定 `_trained_mask_from_splits`（`src/runner
 
 ## Plan
 
-- [ ] `tests/test_trained_mask.py` を作成する。
-- [ ] ケース1: `max_folds=1`, `n_folds=5` で、fold 0 の valid index のみ True になること。
-- [ ] ケース2: `max_folds=None`（全 fold）で全行 True になること。
-- [ ] ケース3: oof に正当な 0.0 が含まれる状況でも mask が split 由来で立つこと（旧 `oof != 0` の欠陥の再発防止）。
-- [ ] ケース4: `cv_strategy=group`（GroupKFold + groups 指定）でも同様に成立すること。
-- [ ] `PYTHONPATH=src .venv/bin/python -m unittest discover tests` が全件 OK。
+- [x] `tests/test_trained_mask.py` を作成する。
+- [x] ケース1: `max_folds=1`, `n_folds=5` で、fold 0 の valid index のみ True になること。
+- [x] ケース2: `max_folds=None`（全 fold）で全行 True になること。
+- [x] ケース3: oof に正当な 0.0 が含まれる状況でも mask が split 由来で立つこと（旧 `oof != 0` の欠陥の再発防止）。
+- [x] ケース4: `cv_strategy=group`（GroupKFold + groups 指定）でも同様に成立すること。
+- [x] `PYTHONPATH=src .venv/bin/python -m unittest discover tests` が全件 OK。
 
 ## Acceptance Criteria
 
 - `_trained_mask_from_splits` を対象にしたテストが 3 ケース以上追加され、既存テストと合わせて全件 OK。
 - 「予測値 0.0 を未学習と誤判定しない」ことを明示的に検証するケースが含まれる。
+
+## Verification
+
+2026-07-07 完了。
+
+```bash
+PYTHONPATH=src .venv/bin/python -m unittest tests.test_trained_mask
+# 4 tests OK
+
+PYTHONPATH=src .venv/bin/python -m py_compile tests/test_trained_mask.py src/runner/experiment/train.py src/pipelines/splits.py
+# OK
+```
