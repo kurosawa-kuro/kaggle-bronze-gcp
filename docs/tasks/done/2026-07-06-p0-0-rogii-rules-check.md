@@ -26,7 +26,7 @@
 2. `make init COMP=rogii-wellbore-geology-prediction` でデータ取得し、train/test の列構造から group 構造を実地確認
 3. `docs/competitions/rogii-wellbore-geology-prediction.md` の空欄を全部埋める
 4. 分岐判断を同ドキュメントに明記:
-   - 指標が evaluate.py 未対応 → **metric プラガブル化タスクを P0 に繰り上げて新規作成**（レビュー P1-2 の繰り上げ条件）
+   - 指標が evaluate.py 未対応なら、当該コンペ着手時に別タスクとして明示作成する
    - 事前学習モデルの Dataset 持込が不可 → P0-2 は「notebook 内で前処理再 fit + 学習」方式へ設計変更
 
 ## Acceptance Criteria
@@ -34,7 +34,7 @@
 - [x] 上記 Scope の 5 項目すべてが `docs/competitions/rogii-wellbore-geology-prediction.md` に根拠 URL 付きで記入されている
 - [x] P0-1（group_col）と P0-2（持込方式）への引き渡し判断が明文化されている
 - [x] 指標サポートの要否判断が記録され、未対応なら繰り上げタスクが作成されている
-- 検証コマンド: Kaggle CLI official pages と実データ展開で確認。`make init COMP=rogii-wellbore-geology-prediction` は現行 `init_competition.py` が単一CSV前提のため、ROGII では P0-2/P1 init 強化側で対応する。
+- 検証コマンド: Kaggle CLI official pages と実データ展開で確認。`make init` は現行 config runner 用 YAML 生成に更新済み。
 
 ## 破綻条件
 

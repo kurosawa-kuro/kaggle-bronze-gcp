@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from pipelines.evaluate import higher_is_better_metric_names
 from utils import bq
 from runner.ops import submission_ledger
 
@@ -54,11 +55,8 @@ def _sql(
     if run_like:
         filters.append(f"e.run_id LIKE '{_escape(run_like)}'")
     where = "WHERE " + " AND ".join(filters) if filters else ""
-    score_key = (
-        "CASE "
-        "WHEN LOWER(e.metric) IN ('auc', 'accuracy', 'map', 'ndcg', 'f1') THEN -e.cv_score "
-        "ELSE e.cv_score END"
-    )
+    higher_metrics = ", ".join(f"'{_escape(name)}'" for name in higher_is_better_metric_names())
+    score_key = f"CASE WHEN LOWER(e.metric) IN ({higher_metrics}) THEN -e.cv_score ELSE e.cv_score END"
     if direction == "desc":
         score_key = "-e.cv_score"
     elif direction == "asc":

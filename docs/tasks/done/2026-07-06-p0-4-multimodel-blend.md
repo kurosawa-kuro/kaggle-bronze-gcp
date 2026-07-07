@@ -28,7 +28,7 @@
 
 - [x] `make smoke CONFIG=configs/catboost_baseline.yaml` が通り、oof.parquet / test_pred.parquet / fold_manifest.json が LGBM run と同じ契約で出る
 - [x] `make train-local CONFIG=configs/catboost_baseline.yaml RUN_ID=cat001` が通る
-- [ ] `make train-vertex CONFIG=configs/catboost_baseline.yaml RUN_ID=cat_check` が Vertex でも完走する（イメージに catboost/xgboost を追加）
+- [x] `make train-vertex CONFIG=configs/catboost_baseline.yaml RUN_ID=cat_check` が Vertex でも完走する（イメージに catboost/xgboost を追加）
 - [x] `make smoke CONFIG=configs/xgboost_baseline.yaml` が通り、multiclass probability を正規化した oof/test_pred/submission が出る
 - [x] `make blend` が LGBM run + CatBoost run から blended submission を生成し、blend の OOF CV が単体ベストと同等以上であることを metrics.json で確認できる
 - [x] fold_manifest 不一致の run を混ぜると明示エラーで止まる
@@ -44,11 +44,12 @@
 - smoke blend 結果: `p04_blend_smoke` は `weight_grid` の `[1.0, 0.0]` を選択し、OOF logloss `0.3276377551043895`。CatBoost smoke 単体 `0.4114301546818184`、LGBM smoke 単体 `0.3276377551043895` と同等以上を確認。
 - full local 結果: `cat001` は 3 seeds × 5 folds の 15 boosters を保存し、OOF logloss `0.09465636124708839`。`oof.parquet` / `test_pred.parquet` / `fold_manifest.json` / `submission.csv` / `model/manifest.json` を確認済み。
 - full blend 結果: `blend001` は `full_gcp_lgbm_001 + cat001` から生成成功。OOF logloss `0.08668087872662794`、best weight `[1.0, 0.0]`。
-- Vertex full 結果: `make build-push` と `make stage-data CONFIG=configs/catboost_baseline.yaml` は成功。`make train-vertex CONFIG=configs/catboost_baseline.yaml RUN_ID=cat_check SYNC=--sync` は Vertex job `projects/941178142366/locations/us-central1/customJobs/8950973537221345280` を作成し、CatBoost fold 4/5 までは Cloud Logging で確認したが、`2026-07-06T17:02:56Z` 以降ログが止まり `JOB_STATE_RUNNING` のまま進捗停止したため、コスト抑止のため cancel。最終状態は `JOB_STATE_CANCELLED`。Vertex 完走は未達。
+- Vertex full 初回結果: `make build-push` と `make stage-data CONFIG=configs/catboost_baseline.yaml` は成功。`cat_check` は Cloud Logging 停止を検知し、コスト抑止のため cancel。これを受けて guarded sync / auto-cancel を実装し、下記 `cat_check_ondemand` で完走確認済み。
 - 追加修正: `train.py` の trained mask を `oof != 0` から fold split 由来の validation index union に変更。`metrics.json` に seed 内 `fold_scores` と `fold_score_std`、全 fold の `fold_score_mean/std` を永続化した。
 - 追加修正: `vertex_run.py` に guarded sync を追加。`--max-log-silence-minutes` と `--cancel-on-silence` で、worker log が止まった RUNNING job を自動キャンセルできる。`make train-vertex` はデフォルトで `--max-log-silence-minutes 10 --cancel-on-silence` を渡す。
 - 追加検証: `make train-vertex CONFIG=configs/catboost_baseline.yaml RUN_ID=guard_dryrun SYNC=--sync DRY=--dry-run` が job を作成せず plan 表示で終了することを確認。誤って作成された dry-run 確認用 job `projects/941178142366/locations/us-central1/customJobs/3244068384412794880` は即 cancel 済み、最終状態 `JOB_STATE_CANCELLED`。
 - 追加検証: `make smoke CONFIG=configs/catboost_baseline.yaml RUN_ID=p04_cat_guard_smoke` が成功し、`metrics.json` に fold scores が保存されることを確認。`PYTHONPATH=src .venv/bin/python -m unittest discover tests` は 9 tests OK。
+- Vertex full 再実行結果: `SPOT=` で on-demand 実行した `cat_check_ondemand` が完走。Vertex job `projects/941178142366/locations/us-central1/customJobs/7266136344642977792` は `2026-07-06T23:58:32Z` 開始、`2026-07-07T00:30:47Z` 終了、最終状態 `JOB_STATE_SUCCEEDED`。`[train] saved 15 boosters`、`submission.csv` 生成、`27 artifacts` の GCS upload、BQ 記録を確認。`make collect CONFIG=configs/catboost_baseline.yaml RUN_ID=cat_check_ondemand` でローカルにも取り込み済み。CV logloss `0.09465636124708839`。
 
 ## 破綻条件
 

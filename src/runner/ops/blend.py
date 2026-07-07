@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from pipelines.evaluate import metric_is_higher_better
+
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Blend compatible run artifacts")
@@ -193,7 +195,7 @@ def _uniform(n: int) -> list[float]:
 
 
 def _choose_best(candidates: list[dict[str, Any]], *, metric: str) -> dict[str, Any]:
-    reverse = metric == "auc"
+    reverse = metric_is_higher_better(metric)
     return sorted(candidates, key=lambda item: item["cv_score"], reverse=reverse)[0]
 
 

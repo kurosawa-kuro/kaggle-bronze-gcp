@@ -46,20 +46,13 @@
 
 ## Active
 
-ROGII 実戦（entry 締切 2026-07-29）に向けた P0 系列。出典は [idea/2026-07-06_bronze-strategy-review.md](idea/2026-07-06_bronze-strategy-review.md) と [idea/2026-07-06_multi-competition-architecture-review.md](idea/2026-07-06_multi-competition-architecture-review.md)。
-**実装順: P0-0 → P0-A → P0-1 → P0-2 →（P0-3 は随時並行）→ P0-4**（順序の根拠: 情報→止血→正しさ→提出可否→スコア押し込み）。
+active task は現在 0 件。P0 系列（ROGII 参戦準備、マルチモデル + blend、Vertex full 完走）はすべて完了し、証跡は `done/` に移動済み。
 
 | ファイル | 用途 |
 |---|---|
-| [active/2026-07-06-p0-0-rogii-rules-check.md](active/2026-07-06-p0-0-rogii-rules-check.md) | ROGII ルール・提出形式・指標・group 構造の事前確認（コード0行、最優先） |
-| [active/2026-07-06-p0-a-config-single-source.md](active/2026-07-06-p0-a-config-single-source.md) | config 単一正本化の止血（Vertex config 無視バグ修正。後続全タスクの土台） |
-| [active/2026-07-06-p0-1-cv-strategy-config.md](active/2026-07-06-p0-1-cv-strategy-config.md) | CV strategy の config 駆動化（GroupKFold + fold overlap 検査） |
-| [active/2026-07-06-p0-2-package-kernel.md](active/2026-07-06-p0-2-package-kernel.md) | code comp 用 package-kernel 経路（前処理状態の永続化を含む。P0-0 完了が着手条件） |
-| [active/2026-07-06-p0-3-submissions-ledger.md](active/2026-07-06-p0-3-submissions-ledger.md) | BQ `submissions` 提出台帳 + `make lb-sync`（他タスクと並行可） |
-| [active/2026-07-06-p0-4-multimodel-blend.md](active/2026-07-06-p0-4-multimodel-blend.md) | CatBoost/XGBoost 統合 + OOF blend ops（P0-1 が前提） |
-| [active/refactoring-candidates.md](active/refactoring-candidates.md) | **タスクコントロール**（状態・順序・マイルストーン・P1/P2 キュー + cleanup 候補） |
+| なし | 進行中タスクなし |
 
-完了済みの主要仕様は `docs/01_requirements.md`〜`docs/08_release_runbook.md` と `docs/adr/` に昇格済み。古い done task は正本として扱わない。
+完了済みの主要仕様は `docs/01_requirements.md`〜`docs/08_release_runbook.md` と `docs/adr/` に昇格済み。完了 task の証跡は `done/` に置く。
 
 ## ルール
 
@@ -85,5 +78,4 @@ ROGII 実戦（entry 締切 2026-07-29）に向けた P0 系列。出典は [ide
 ## Notes
 ```
 
-次に着手できる作業・実行順・マイルストーンは
-[active/refactoring-candidates.md](active/refactoring-candidates.md)（タスクコントロール）で管理する。
+次に着手できる作業・実行順・マイルストーンは、着手時に `active/` へ task file を作って管理する。

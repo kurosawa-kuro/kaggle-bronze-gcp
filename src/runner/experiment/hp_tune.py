@@ -12,6 +12,7 @@ import base64
 import json
 from pathlib import Path
 
+from pipelines.evaluate import metric_direction
 from runner.experiment.vertex_run import _image_uri, _label_value, _load_yaml
 
 METRIC_TAG = "cv_score"
@@ -66,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             "args": container_args,
         },
     }]
-    goal = "maximize" if metric == "auc" else "minimize"
+    goal = metric_direction(metric)
 
     plan = {
         "project": project, "region": region,

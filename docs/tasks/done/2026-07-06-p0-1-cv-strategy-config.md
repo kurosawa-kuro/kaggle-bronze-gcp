@@ -14,7 +14,7 @@
 ## Scope
 
 - In: `_splits()` の strategy 分岐、`train.py:_write_fold_manifest` / `_write_leakage_audit` の group 検査、configs スキーマ拡張、ROGII 用 config 下書き
-- Out: TimeSeriesSplit（`time` は将来枠として設計だけ考慮し実装しない）、CatBoost/XGBoost 側の対応（P0-4 で同じ `_splits` を使う前提の設計にはする）
+- Out: TimeSeriesSplit（今回対象外）、CatBoost/XGBoost 側の対応（P0-4 で同じ split helper を利用する前提）
 - **後方互換**: `cv.strategy` 未指定なら現行挙動（regression→KFold / それ以外→StratifiedKFold）を厳密に維持する
 
 ## Plan

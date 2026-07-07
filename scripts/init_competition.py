@@ -76,7 +76,7 @@ def normalize(raw_dir: Path) -> tuple[Path, Path]:
     return dst_train, dst_test
 
 
-def analyze(train_path: Path, test_path: Path) -> None:
+def analyze(train_path: Path, test_path: Path) -> dict:
     print("\n[init] ③ データ分析中 ...")
     train = pd.read_csv(train_path)
     test = pd.read_csv(test_path) if test_path.exists() else None
@@ -115,19 +115,54 @@ def analyze(train_path: Path, test_path: Path) -> None:
             objective, metric = "multiclass", "logloss"
 
     draft = {
-        "comp": train_path.parent.parent.name,
-        "target": target or "REPLACE_ME",
-        "id_col": (id_candidates[0] if id_candidates else None),
-        "objective": objective,
-        "metric": metric,
-        "n_folds": 5,
-        "seed": 42,
-        "experiments_db": "data/experiments.db",
+        "data": {
+            "comp": train_path.parent.parent.name,
+            "target": target or "REPLACE_ME",
+            "id_col": (id_candidates[0] if id_candidates else None),
+            "objective": objective,
+            "metric": metric,
+        },
+        "model": {
+            "name": "lgbm",
+            "params": {
+                "learning_rate": 0.05,
+                "num_leaves": 63,
+                "min_child_samples": 20,
+                "feature_fraction": 0.8,
+                "bagging_fraction": 0.8,
+            },
+        },
+        "cv": {
+            "n_folds": 5,
+            "seed": 42,
+        },
+        "seeds": [42, 777, 2026],
+        "runtime": {
+            "output_root": "outputs/runs",
+            "num_boost_round": 2000,
+            "early_stopping_rounds": 50,
+            "smoke_max_folds": 1,
+            "smoke_n_folds": 2,
+            "smoke_num_boost_round": 20,
+        },
     }
-    print("\n  ─── conf/config.yaml 下書き ─────────────────────────")
+    print("\n  ─── configs/<comp>_baseline.yaml 下書き ─────────────")
     for line in yaml.dump(draft, allow_unicode=True, default_flow_style=False).splitlines():
         print(f"    {line}")
     print("  ──────────────────────────────────────────────────────")
+    return draft
+
+
+def write_config(comp: str, draft: dict) -> Path:
+    config_dir = ROOT / "configs"
+    config_dir.mkdir(exist_ok=True)
+    dest = config_dir / f"{comp}_baseline.yaml"
+    if dest.exists():
+        print(f"  既存: configs/{dest.name} （スキップ）")
+        return dest
+    dest.write_text(yaml.dump(draft, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    print(f"  作成: configs/{dest.name}")
+    return dest
 
 
 def create_doc(comp: str) -> None:
@@ -155,14 +190,16 @@ def main() -> None:
 
     download(comp, raw_dir)
     normalize(raw_dir)
-    analyze(raw_dir / "train.csv", raw_dir / "test.csv")
+    draft = analyze(raw_dir / "train.csv", raw_dir / "test.csv")
+    config_path = write_config(comp, draft)
     create_doc(comp)
 
     print(f"""
 [init] 完了。次のステップ:
-  1. conf/config.yaml を上記の下書きで更新
+  1. {config_path.relative_to(ROOT)} の target / id_col / objective / metric を確認
   2. rm -rf data/{comp}/interim/ data/{comp}/features/
-  3. make run
+  3. make smoke CONFIG={config_path.relative_to(ROOT)} RUN_ID={comp}_smoke
+  4. make train-local CONFIG={config_path.relative_to(ROOT)} RUN_ID={comp}_lgbm001
 """)
 
 

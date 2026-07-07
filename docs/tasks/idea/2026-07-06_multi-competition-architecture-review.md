@@ -51,7 +51,7 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 1. **正本が3つある**: `env/config.yaml`（global 定数の既定）/ `configs/*.yaml`（runner 用）/ `src/config.py` の import-time 定数。しかもどれが効くかが「経路 ×import 順序」で変わる
 2. **import-time global**: pipelines / models が `from config import TARGET, METRIC...` する構造は、プロセス内で config を切り替えられず、import 順に敏感（Vertex バグの根源）
 3. **コンペ仕様の漏れ**: 提出形式（ID+target 決め打ち）、multiclass=argmax 固定、metric 方向、CV 分割、FE 配線が共通コードに埋まっている
-4. **init が半自動**: `make init` は runner 用 config を生成せず、「存在しない `conf/config.yaml` の下書き表示 + 旧経路 `make run` の案内」で終わる
+4. **解消済み: init が半自動**: `make init` は runner 用 `configs/<comp>_baseline.yaml` を生成し、`make smoke` / `make train-local` の現行経路を案内する
 5. **重複実装**: CV 分割（lgbm/catboost）、metric 方向（3箇所）、成果物ログ（train.py と各 model の `_log`）
 
 ## 4. コード上の根拠
@@ -66,11 +66,11 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 | 6 | `src/pipelines/featurize.py:11,35` | `LABEL_CLASSES` が module global の可変状態。`score.py:26` が読む | プロセス内の暗黙結合。FE 差し替えも「run.py の import を手編集」が正規手順（docstring）で、config から選べない |
 | 7 | `src/pipelines/ingest.py:18-27` | interim parquet があれば無条件返却。raw は `train.csv`/`test.csv` 固定 | loader 変更時に stale cache。複数ファイル型コンペ（ROGII 含む可能性）で load_data 自体の差し替え口がない |
 | 8 | `src/pipelines/evaluate.py:8-15` | metric 3種の if 分岐 | RMSLE/MAE/QWK/MAP@K 等に未対応（前回レビュー済み） |
-| 9 | `src/runner/experiment/tune.py:24-25` / `hp_tune.py:69` / `runner/ops/compare.py:56-59` | metric 方向（maximize/minimize）の**3重複実装**（compare は独自の metric 名リストまで持つ） | metric 追加時に3箇所。漏れると Optuna/Vizier が**逆方向に最適化**して静かに実験を無駄にする |
+| 9 | `src/pipelines/evaluate.py` / `src/runner/experiment/tune.py` / `src/runner/experiment/hp_tune.py` / `src/runner/ops/compare.py` / `src/runner/ops/blend.py` | ✅ 2026-07-07 解消済み。metric 関数と maximize/minimize 判定を `evaluate.py` の registry に一元化し、Optuna / Vertex HPT / compare / blend が参照する | metric 追加時の修正点を registry 1箇所に縮小し、HPO 逆最適化と比較順序ミスを防止 |
 | 10 | `src/models/lgbm.py:86-89` / `catboost_.py:65-68` | CV 分割ロジックの重複実装 | cv.strategy 追加を2箇所（xgboost 含め3箇所）に入れる羽目になる |
 | 11 | `src/models/catboost_.py:1,19-20` | docstring「lgbm.py と同じシグネチャ」だが実際は `(X, y, params, notes)` のみ | P0-4（マルチモデル統合）の見積もりを狂わせる嘘コメント |
 | 12 | `src/ports.py:26-34` | `FeatureTransformer` は存在しない `features/base.py` を参照。`features/stellar.py` の `add_stellar_fe(X_train, X_test)->tuple` は Protocol `__call__(X)->DataFrame` に不適合 | 「全コードが適合済み」という自己申告が偽の dead spec。registry 設計時に実態へ合わせて書き直すか削除 |
-| 13 | `scripts/init_competition.py:126-129,165-170` | 出力は「`conf/config.yaml` 下書きの print」のみ（`conf/` は実在せず、正は `env/`）。runner 用 `configs/<comp>.yaml` を生成せず、案内は旧経路 `make run` | 新コンペ初日の手作業とミスの源。パス表記も drift |
+| 13 | `scripts/init_competition.py` | ✅ 2026-07-07 解消済み。runner 用 `configs/<comp>_baseline.yaml` を生成し、現行 `make smoke` / `make train-local` を案内する | 新コンペ初日の手作業とミスを削減 |
 | 14 | `src/runner/ops/compare.py:74-76` | experiments×cost_estimates の JOIN が `ON e.run_id = c.run_id` のみ | run_id はコンペ内一意でしかない。`sweep.py` は run_id=config stem+tag なので、別コンペで同じ config 名を使い回すと**他コンペのコストが合算される** |
 | 15 | `src/serving/predictor.py:63-66` | 生の数値配列前提、前処理なし | 前処理状態の非永続化（P0-2 で対応中）の裏面。複数コンペで serving を使い回す場合も preprocess.json が前提になる |
 
@@ -88,7 +88,7 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 
 - **P0-A: config 単一正本化の止血**（新規・最優先。既存 P0-1 の前に差し込む）
 - **P0-B: CV strategy registry + 分割ロジック一本化**（既存 P0-1 を拡張: lgbm/catboost の `_splits` 重複を `pipelines/splits.py` に統合してから config 駆動化）
-- **P0-C: metric registry + 方向の一元化**（前回 P1-2 を P0 へ格上げ。3重複が Vizier 逆最適化のバグ源であるため、ROGII の指標確認と同時に実施）
+- **P0-C: metric registry + 方向の一元化**（✅ 2026-07-07 実装済み。`evaluate.py` の registry を Optuna / Vertex HPT / compare / blend が参照）
 - **P0-D: sample_submission 正本化 + submission_contract.json**（score.py。ROGII でも次コンペでも最初に壊れる箇所）
 - 既存 P0-0（ルール確認）/ P0-2（package-kernel）/ P0-3（提出台帳）/ P0-4（マルチモデル+blend）は維持。ただし P0-4 は catboost シグネチャ統一を含むためコスト再見積もり（2〜3日）
 - **P1**: init の `configs/<comp>/baseline.yaml` 自動生成 / FE registry（`features:` リスト）/ BQ JOIN に competition 追加 / interim cache の init 時自動削除 + schema hash 照合 / cfg 明示渡しへの段階移行（LABEL_CLASSES 排除を含む）
@@ -101,7 +101,7 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 |---|---|---|---|---|---|---|---|
 | P0-A config 止血 | Vertex でも「渡した config が正本」を成立させる | **最大**。切替＝イメージ再ビルドを撲滅 | **大**（ROGII の Vertex 実験が正しく回る前提） | `train.py`（run() 冒頭で KBC_CONFIG_PATH 設定）、`Makefile`（COMP_DATA を CONFIG 由来に）、`utils/logger.py`（competition/metric を引数化） | 1日 | env/config.yaml 依存の legacy 経路（run.py/notebooks）を巻き込むと肥大 → runner 経路のみに限定 | 別コンペ config（titanic 等）で `--dry-run`＋smoke を Vertex イメージ内相当（KBC 未設定状態）で実行し、metrics.json の competition/metric が config 側と一致 |
 | P0-B CV registry | `cv.strategy`+`group_col` を config 化し、分割実装を1本化 | 大（新コンペ＝config 1行） | **最大**（ROGII の GroupKFold。前回 P0-1 と同じ） | 新 `pipelines/splits.py`、`lgbm.py`/`catboost_.py`/`xgboost_.py`（_splits 削除）、`train.py`（fold_manifest） | 1〜2日 | 既定挙動の非互換 → strategy 未指定時の fold_manifest ハッシュ一致で担保 | `make smoke`（既存 config でハッシュ不変）+ group config で overlap=0 |
-| P0-C metric registry | metric 関数と lower_is_better を1箇所に。tune/hp_tune/compare が参照 | 大（metric 追加＝registry 1エントリ） | **大**（HPO 逆最適化の芽を摘む + ROGII 指標対応） | `evaluate.py`（registry 化）、`tune.py:24`、`hp_tune.py:69`、`compare.py:56` | 1日 | custom metric の実装ミス → 公式/sklearn と突合するテスト1本 | 3経路（tune/hp-tune dry-run/compare）で direction が registry と一致することのテスト |
+| P0-C metric registry | ✅ 2026-07-07 実装済み。metric 関数と higher_is_better を `evaluate.py` に集約し、tune/hp_tune/compare/blend が参照 | 大（metric 追加＝registry 1エントリ） | **大**（HPO 逆最適化の芽を摘む + ROGII 指標対応） | `evaluate.py`、`tune.py`、`hp_tune.py`、`compare.py`、`blend.py`、`tests/test_metrics.py` | 完了 | direction-only metric は scorer 未実装時に明示エラー | `tests/test_metrics.py` と既存 unittest で registry 方向・CV scorer・compare SQL を検証 |
 | P0-D sample_submission 正本化 | 提出列名・列順・形式を sample から決める | 大（提出形式差異を吸収） | **大**（提出形式ミス＝スコア0の防止） | `score.py`、`ingest.py`（sample 読込）、train.py（submission_contract.json 出力） | 1日 | sample が無いコンペ → 現行 ID+TARGET へフォールバック | 生成 submission の列名・列順・行数が sample と一致するアサート |
 | P1 init 強化 | `make init` が `configs/<comp>/baseline.yaml` と doc を生成し、次コマンドまで案内 | 大（切替の手作業をほぼ0に） | 中（48h 初動の速度） | `scripts/init_competition.py` | 1日 | 自動推定の誤り → 生成 YAML に `REPLACE_ME` を残し人間確認を強制（現 draft と同じ思想） | `make init COMP=titanic` → 生成 config で `make smoke` が無編集で通る |
 | P1 FE registry | `features: [base, ...]` で FE を宣言選択 | 大（src/ 共通コードを触らず FE 追加） | 大（sweep の弾。前回 P1-3 と同じ） | `featurize.py`、`features/__init__.py`、`stellar.py`（移植）、ports.py（実態合わせ） | 1〜2日 | encode 前/後の規約曖昧 → 「raw df を受ける」を規約化+テスト | features 指定 config の smoke + config snapshot に FE 名が残ること |
@@ -135,7 +135,7 @@ runtime: {...}                   # 現行のまま
 ```
 
 - **CV strategy registry** = `src/pipelines/splits.py` の `CV_STRATEGIES: dict[str, callable]`。lgbm/catboost/xgboost は自前 `_splits` を捨ててこれを呼ぶ
-- **metric registry** = `src/pipelines/evaluate.py` の `METRICS: dict[str, Metric]`（`Metric = (fn, lower_is_better)`）。tune / hp_tune / compare の方向判定はすべてここを参照
+- **metric registry** = ✅ 実装済み。`src/pipelines/evaluate.py` の `METRICS: dict[str, MetricSpec]`（scorer + higher_is_better）。tune / hp_tune / compare / blend の方向判定はすべてここを参照
 - **feature registry** = `src/features/__init__.py` の `FEATURE_REGISTRY: dict[str, fn]`。規約:「encode 前の raw df を受け、copy を返す」
 - **model registry** = `src/models/__init__.py` の `TRAINERS: dict[str, train_cv]`。全 trainer を lgbm.py の拡張シグネチャ（n_folds/seed/max_folds/num_boost_round/early_stopping_rounds/log_run_id）に統一
 - **submission adapter** = `score.make_submission(cfg, preds, raw)` が sample_submission の列順で書き、`submission_contract.json`（列名・行数・形式・sample の sha256）を成果物に残す
@@ -199,4 +199,4 @@ outputs/runs/<comp>/<run_id>/   # 現行契約 + preprocess.json + submission_co
 2. metric 方向の3重複実装（#9）— HPO 逆最適化リスク
 3. BQ JOIN の run_id 衝突（#14）— 複数コンペ蓄積後に顕在化
 4. catboost_.py の嘘 docstring（#11）と ports.py の dead spec（#12）— 見積もりと保守の罠
-5. init_competition の `conf/config.yaml` 表記 drift（#13）
+5. ✅ init_competition の旧 config 表記 drift（#13）は 2026-07-07 に解消済み

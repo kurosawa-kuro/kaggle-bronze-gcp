@@ -21,10 +21,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _direction(metric: str) -> str:
-    return "maximize" if metric == "auc" else "minimize"
-
-
 def _search_space(trial) -> dict[str, Any]:
     return {
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
@@ -53,7 +49,7 @@ def run(*, config_path: Path, run_id: str, n_trials: int, smoke: bool, final: bo
     os.environ["KBC_CONFIG_PATH"] = str(config_path)
     import optuna
     from models.lgbm import train_cv
-    from pipelines.evaluate import cv_score
+    from pipelines.evaluate import cv_score, metric_direction
     from pipelines.featurize import make_features
     from pipelines.ingest import load_data
 
@@ -80,7 +76,7 @@ def run(*, config_path: Path, run_id: str, n_trials: int, smoke: bool, final: bo
         mask = oof.sum(axis=1) != 0 if oof.ndim > 1 else oof != 0
         return cv_score(y_train.loc[mask].to_numpy(), oof[mask])
 
-    study = optuna.create_study(direction=_direction(metric))
+    study = optuna.create_study(direction=metric_direction(metric))
     study.optimize(objective, n_trials=n_trials)
 
     best_params = {**cfg.get("model", {}).get("params", {}), **study.best_params}
