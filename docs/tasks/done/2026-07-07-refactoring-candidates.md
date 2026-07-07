@@ -2,7 +2,7 @@
 
 `docs/tasks/README.md` から参照される、毎日の作業開始時に最初に見る実行ハブ。**状態・順序・判断だけ**をここに置き、タスク詳細は各ノート、仕様は `docs/01〜08`、判断理由は `docs/adr/` に置く（重複させない）。
 
-出典レビュー: [銅メダル戦略](../idea/2026-07-06_bronze-strategy-review.md) / [マルチコンペ切替再評価](../idea/2026-07-06_multi-competition-architecture-review.md)
+出典レビュー: [銅メダル戦略](../idea/2026-07-06_bronze-strategy-review.md) / [マルチコンペ切替再評価](2026-07-06_multi-competition-architecture-review.md)
 
 ## 現フェーズ: ROGII 参戦準備
 

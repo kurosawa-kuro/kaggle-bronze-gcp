@@ -4,7 +4,7 @@
 
 ブロンズ取得まで複数 Kaggle コンペを切り替えて挑戦できるように、共通 runner に漏れているコンペ固有仕様を減らし、次コンペ投入時の変更箇所を `configs/<comp>/` と必要最小限の adapter に寄せる。
 
-この task は [../idea/2026-07-06_multi-competition-architecture-review.md](../idea/2026-07-06_multi-competition-architecture-review.md) を実装単位へ落としたもの。
+この task は [2026-07-06_multi-competition-architecture-review.md](2026-07-06_multi-competition-architecture-review.md) を実装単位へ落としたもの。
 
 ## Context
 
@@ -75,7 +75,7 @@ outputs/runs/<comp>/<run_id>/
 
 ## Acceptance Criteria
 
-- 新コンペで共通 `src/` を編集せず、最低限 `configs/<comp>/baseline.yaml` から smoke 実行に入れる。
+- 新コンペで共通 `src/` を編集せず、最低限 `configs/<comp>_baseline.yaml` から smoke 実行に入れる。
 - `sample_submission.csv` があるコンペでは、生成 `submission.csv` の列名・列順・行数が sample と一致する。
 - 各 run に `submission_contract.json` が残り、提出形式の根拠を後から確認できる。
 - ROGII 形式と generic CSV 形式の提出生成テストが通る。

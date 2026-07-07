@@ -17,7 +17,7 @@ Kaggle ブロンズ取得を目的とした LightGBM 主軸・表形式データ
 | 入口 | 用途 |
 |---|---|
 | [tasks/README.md](./tasks/README.md) | 今日やること、次にやること、完了したことを管理する |
-| [tasks/active/refactoring-candidates.md](./tasks/active/refactoring-candidates.md) | 常時見る cleanup / refactoring 候補 |
+| [tasks/done/2026-07-07-refactoring-candidates.md](./tasks/done/2026-07-07-refactoring-candidates.md) | P0 系列完了時点の cleanup / refactoring 証跡 |
 | [04_workflows.md](./04_workflows.md) | 作業開始、検証、リリース前確認のコマンド |
 | [07_test_strategy.md](./07_test_strategy.md) | タスク完了前に通す品質ゲート |
 

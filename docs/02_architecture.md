@@ -127,7 +127,7 @@ models.lgbm.train_cv()
 
 | モジュール | 役割 |
 |---|---|
-| `src/runner/experiment/train.py` | config 駆動の学習 runner。現状 `model.name=lgbm` のみ対応 |
+| `src/runner/experiment/train.py` | config 駆動の学習 runner。`model.name=lgbm / catboost / xgboost` に対応 |
 | `src/runner/experiment/vertex_run.py` | Custom Job spec 作成・投入。config は base64 で渡すため新 config でも image rebuild 不要 |
 | `src/runner/experiment/sweep.py` | 複数 config を非ブロッキング `.submit()` で並列投入 |
 | `src/runner/experiment/tune.py` | Optuna による単一マシン HPO。`best_params.json`, `best_config.yaml`, `trials.csv` を生成 |

@@ -1,6 +1,6 @@
 # 複数コンペ切替アーキテクチャ再評価（2026-07-06）
 
-> 依頼: 他 AI エージェントによるアーキテクチャ調査（旧 `backlog/2026-07-06_multi_competition_architecture.md`。本レビューに統合済みのため削除、原文は git 履歴にあり）と、[idea/2026-07-06_bronze-strategy-review.md](2026-07-06_bronze-strategy-review.md)（前回レビュー）を鵜呑みにせず、コードを読み直して再評価したもの。
+> 依頼: 他 AI エージェントによるアーキテクチャ調査（旧 `backlog/2026-07-06_multi_competition_architecture.md`。本レビューに統合済みのため削除、原文は git 履歴にあり）と、[idea/2026-07-06_bronze-strategy-review.md](../idea/2026-07-06_bronze-strategy-review.md)（前回レビュー）を鵜呑みにせず、コードを読み直して再評価したもの。
 > 主眼: ROGII 単発対応ではなく、**ブロンズ取得まで複数コンペを渡り歩ける低切替コスト基盤**にするためのリファクタリング。
 > 本文の主張はすべて 2026-07-06 時点のコードで実際に確認済み（セクション4に根拠）。
 
@@ -64,17 +64,17 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 | 2 | `src/runner/experiment/train.py:140-145` vs `:168` | `--input-uri` staging で `from config import DATA_RAW`（140-145）が、`os.environ["KBC_CONFIG_PATH"]=...`（`_train_lgbm` 冒頭 168）より**先に**実行される | **Vertex 経路の致命バグ**。config module が env/config.yaml で確定・キャッシュされ、ingest.py:8 / featurize.py:7 / evaluate.py:6 / lgbm.py:9 の `from config import ...` が全部ベイク値を読む。渡した config の target/objective/metric は無視される。新コンペでは target 列不在の KeyError（良くて）、列名が偶然一致すれば誤った目的関数で silent mis-train（最悪） |
 | 3 | `infra/Dockerfile:14` | `COPY env ./env` で env/config.yaml をイメージにベイク | #2 と合わさり「コンペ切替＝イメージ再ビルド」が実際の運用になるが未文書化。`vertex_run.py:76` のコメント（再ビルド不要）と矛盾 |
 | 4 | `Makefile` `COMP_DATA` 定義 | `env/config.yaml` の comp を読む | `make stage-data CONFIG=configs/new.yaml` が旧コンペの raw を GCS へ上げる。#2 と合わせ「パスは新コンペ・中身は旧コンペ」の混線が可能 |
-| 5 | `src/pipelines/score.py:26-43` | 提出 = `ID_COL + TARGET` 決め打ち。multiclass は argmax でラベル復元固定 | sample_submission.csv を読まない。確率提出・複数列・列順指定のコンペで即壊れる |
+| 5 | `src/pipelines/score.py` / `src/runner/experiment/train.py` / `src/runner/ops/blend.py` / `src/runner/ops/package_kernel.py` | ✅ 2026-07-07 解消済み。提出生成は `sample_submission.csv` を正本にし、`submission_contract.json` を保存する | 確率提出・複数列・列順指定のコンペで提出形式ミスを防ぐ |
 | 6 | `src/pipelines/featurize.py:11,35` | `LABEL_CLASSES` が module global の可変状態。`score.py:26` が読む | プロセス内の暗黙結合。FE 差し替えも「run.py の import を手編集」が正規手順（docstring）で、config から選べない |
-| 7 | `src/pipelines/ingest.py:18-27` | interim parquet があれば無条件返却。raw は `train.csv`/`test.csv` 固定 | loader 変更時に stale cache。複数ファイル型コンペ（ROGII 含む可能性）で load_data 自体の差し替え口がない |
-| 8 | `src/pipelines/evaluate.py:8-15` | metric 3種の if 分岐 | RMSLE/MAE/QWK/MAP@K 等に未対応（前回レビュー済み） |
+| 7 | `src/pipelines/ingest.py` / `src/competitions/rogii.py` | ✅ 2026-07-07 部分解消済み。ROGII directory adapter と interim metadata stale 検知を実装済み | loader 変更時に別コンペ cache を黙って再利用しない。特殊 loader は `src/competitions/` escape hatch に限定 |
+| 8 | `src/pipelines/evaluate.py` | ✅ 2026-07-07 解消済み。metric registry と direction-only metric を追加 | metric 追加時の方向判定漏れを防ぎ、scorer 未実装 metric は明示エラー |
 | 9 | `src/pipelines/evaluate.py` / `src/runner/experiment/tune.py` / `src/runner/experiment/hp_tune.py` / `src/runner/ops/compare.py` / `src/runner/ops/blend.py` | ✅ 2026-07-07 解消済み。metric 関数と maximize/minimize 判定を `evaluate.py` の registry に一元化し、Optuna / Vertex HPT / compare / blend が参照する | metric 追加時の修正点を registry 1箇所に縮小し、HPO 逆最適化と比較順序ミスを防止 |
-| 10 | `src/models/lgbm.py:86-89` / `catboost_.py:65-68` | CV 分割ロジックの重複実装 | cv.strategy 追加を2箇所（xgboost 含め3箇所）に入れる羽目になる |
-| 11 | `src/models/catboost_.py:1,19-20` | docstring「lgbm.py と同じシグネチャ」だが実際は `(X, y, params, notes)` のみ | P0-4（マルチモデル統合）の見積もりを狂わせる嘘コメント |
+| 10 | `src/pipelines/splits.py` / `src/models/lgbm.py` / `src/models/catboost_.py` / `src/models/xgboost_.py` | ✅ 2026-07-07 解消済み。CV 分割は `pipelines.splits.make_splits` に一本化 | cv.strategy 追加時にモデルごとの重複修正を避ける |
+| 11 | `src/models/catboost_.py` / `src/models/xgboost_.py` | ✅ 2026-07-07 解消済み。runner signature を LGBM と統一 | P0-4 のマルチモデル統合と Vertex 実行契約に接続済み |
 | 12 | `src/ports.py:26-34` | `FeatureTransformer` は存在しない `features/base.py` を参照。`features/stellar.py` の `add_stellar_fe(X_train, X_test)->tuple` は Protocol `__call__(X)->DataFrame` に不適合 | 「全コードが適合済み」という自己申告が偽の dead spec。registry 設計時に実態へ合わせて書き直すか削除 |
 | 13 | `scripts/init_competition.py` | ✅ 2026-07-07 解消済み。runner 用 `configs/<comp>_baseline.yaml` を生成し、現行 `make smoke` / `make train-local` を案内する | 新コンペ初日の手作業とミスを削減 |
-| 14 | `src/runner/ops/compare.py:74-76` | experiments×cost_estimates の JOIN が `ON e.run_id = c.run_id` のみ | run_id はコンペ内一意でしかない。`sweep.py` は run_id=config stem+tag なので、別コンペで同じ config 名を使い回すと**他コンペのコストが合算される** |
-| 15 | `src/serving/predictor.py:63-66` | 生の数値配列前提、前処理なし | 前処理状態の非永続化（P0-2 で対応中）の裏面。複数コンペで serving を使い回す場合も preprocess.json が前提になる |
+| 14 | `src/runner/ops/compare.py` | ✅ 2026-07-07 解消済み。experiments / cost_estimates / submissions は `(competition, run_id)` で JOIN | コンペ跨ぎの同名 run_id で比較・費用・提出履歴が混ざらない |
+| 15 | `src/serving/predictor.py` | P0-2 で `model/preprocess.json` 永続化は完了。serving predictor の生配列前提は Endpoint/Batch 用の将来整理対象 | Kaggle ブロンズ主経路は package kernel / batch input で前処理を再現するため、常駐 Endpoint 優先度は低い |
 
 **健全な部分（変えない）**: GCS `runs/<comp>/<run_id>` と `data/<comp>/raw` の名前空間、BQ の competition 列、Model Registry `kaggle-<comp>`、run_id 成果物契約、Makefile UX、Terraform。複数コンペ横断で破綻しない設計が既にできている。
 
@@ -113,7 +113,7 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 
 ## 8. 理想のアーキテクチャ案
 
-- **competition profile** = `configs/<comp>/baseline.yaml` の `competition:` セクション（下記）。`make init` が生成し、人間が target/metric を確認して確定。Python の profile クラスは作らない
+- **competition profile** = 現行では `configs/<comp>_baseline.yaml` の `data:` セクション。`make init` が生成し、人間が target/metric を確認して確定。Python の profile クラスは作らない
 - **config schema**（現行スキーマとの互換を保ち、既存キーは温存）:
 
 ```yaml
