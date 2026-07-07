@@ -8,6 +8,8 @@
 
 ## 1. 結論
 
+> 2026-07-07 更新: 本レビューから切り出した実装 task [done/2026-07-07_multi-competition-switching-hardening.md](../done/2026-07-07_multi-competition-switching-hardening.md) は完了済み。P0-D、feature registry の最小導入、BigQuery JOIN 固定、interim cache stale 検知、`submission_contract.json` 永続化は実装・テスト済み。
+
 **「config 駆動」は半分だけ本物である。** ローカル経路（smoke / train-local）は渡した config が正本として機能するが、**Vertex 経路では import 順序バグにより、イメージにベイクされた `env/config.yaml` が target / objective / metric / データパスの正本になり、`--config-b64` で渡した新コンペの data セクションは実質無視される**。`full_gcp_lgbm_001` が成功したのは、ベイクされた env/config.yaml と渡した config が同一コンペだったからにすぎない。
 
 つまり現状のコンペ切替の実手順は「env/config.yaml を書き換えて **docker イメージを再ビルド**」であり、これはどこにも文書化されておらず、vertex_run.py のコメント（「config をイメージにベイクせず引数で渡す＝再ビルド不要」）と真逆である。切替コストが高い最大の原因は FE でも CV でもなく、**この二重正本と import-time global** にある。
@@ -89,9 +91,9 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 - **P0-A: config 単一正本化の止血**（新規・最優先。既存 P0-1 の前に差し込む）
 - **P0-B: CV strategy registry + 分割ロジック一本化**（既存 P0-1 を拡張: lgbm/catboost の `_splits` 重複を `pipelines/splits.py` に統合してから config 駆動化）
 - **P0-C: metric registry + 方向の一元化**（✅ 2026-07-07 実装済み。`evaluate.py` の registry を Optuna / Vertex HPT / compare / blend が参照）
-- **P0-D: sample_submission 正本化 + submission_contract.json**（score.py。ROGII でも次コンペでも最初に壊れる箇所）
+- **P0-D: sample_submission 正本化 + submission_contract.json**（✅ 2026-07-07 実装済み。`score.py` 共通 adapter、train/blend/package_kernel 対応、contract 永続化）
 - 既存 P0-0（ルール確認）/ P0-2（package-kernel）/ P0-3（提出台帳）/ P0-4（マルチモデル+blend）は維持。ただし P0-4 は catboost シグネチャ統一を含むためコスト再見積もり（2〜3日）
-- **P1**: init の `configs/<comp>/baseline.yaml` 自動生成 / FE registry（`features:` リスト）/ BQ JOIN に competition 追加 / interim cache の init 時自動削除 + schema hash 照合 / cfg 明示渡しへの段階移行（LABEL_CLASSES 排除を含む）
+- **P1**: init の `configs/<comp>_baseline.yaml` 自動生成（✅）/ FE registry（✅ 最小導入）/ BQ JOIN に competition 追加（✅）/ interim cache の stale 検知（✅）/ cfg 明示渡しへの段階移行（LABEL_CLASSES 排除を含む、未実施）
 - **P2**: `src/competitions/` escape hatch（ROGII の loader が特殊と判明した時だけ）/ ports.py の実態合わせ or 削除 / run.py・notebooks の legacy 退役 / init_competition の `conf/` 表記修正
 - **やらない**: 5責務フル CompetitionPlugin / YAML 変数展開 / cache config_hash 化 / ExperimentConfig 一括全面書換え / （従来どおり）Endpoint 常駐・Monitoring・Feature Store・KFP 細分化・分散 Optuna
 
@@ -102,12 +104,12 @@ CompetitionPlugin の全面導入や config オブジェクトの一括書換え
 | P0-A config 止血 | Vertex でも「渡した config が正本」を成立させる | **最大**。切替＝イメージ再ビルドを撲滅 | **大**（ROGII の Vertex 実験が正しく回る前提） | `train.py`（run() 冒頭で KBC_CONFIG_PATH 設定）、`Makefile`（COMP_DATA を CONFIG 由来に）、`utils/logger.py`（competition/metric を引数化） | 1日 | env/config.yaml 依存の legacy 経路（run.py/notebooks）を巻き込むと肥大 → runner 経路のみに限定 | 別コンペ config（titanic 等）で `--dry-run`＋smoke を Vertex イメージ内相当（KBC 未設定状態）で実行し、metrics.json の competition/metric が config 側と一致 |
 | P0-B CV registry | `cv.strategy`+`group_col` を config 化し、分割実装を1本化 | 大（新コンペ＝config 1行） | **最大**（ROGII の GroupKFold。前回 P0-1 と同じ） | 新 `pipelines/splits.py`、`lgbm.py`/`catboost_.py`/`xgboost_.py`（_splits 削除）、`train.py`（fold_manifest） | 1〜2日 | 既定挙動の非互換 → strategy 未指定時の fold_manifest ハッシュ一致で担保 | `make smoke`（既存 config でハッシュ不変）+ group config で overlap=0 |
 | P0-C metric registry | ✅ 2026-07-07 実装済み。metric 関数と higher_is_better を `evaluate.py` に集約し、tune/hp_tune/compare/blend が参照 | 大（metric 追加＝registry 1エントリ） | **大**（HPO 逆最適化の芽を摘む + ROGII 指標対応） | `evaluate.py`、`tune.py`、`hp_tune.py`、`compare.py`、`blend.py`、`tests/test_metrics.py` | 完了 | direction-only metric は scorer 未実装時に明示エラー | `tests/test_metrics.py` と既存 unittest で registry 方向・CV scorer・compare SQL を検証 |
-| P0-D sample_submission 正本化 | 提出列名・列順・形式を sample から決める | 大（提出形式差異を吸収） | **大**（提出形式ミス＝スコア0の防止） | `score.py`、`ingest.py`（sample 読込）、train.py（submission_contract.json 出力） | 1日 | sample が無いコンペ → 現行 ID+TARGET へフォールバック | 生成 submission の列名・列順・行数が sample と一致するアサート |
-| P1 init 強化 | `make init` が `configs/<comp>/baseline.yaml` と doc を生成し、次コマンドまで案内 | 大（切替の手作業をほぼ0に） | 中（48h 初動の速度） | `scripts/init_competition.py` | 1日 | 自動推定の誤り → 生成 YAML に `REPLACE_ME` を残し人間確認を強制（現 draft と同じ思想） | `make init COMP=titanic` → 生成 config で `make smoke` が無編集で通る |
-| P1 FE registry | `features: [base, ...]` で FE を宣言選択 | 大（src/ 共通コードを触らず FE 追加） | 大（sweep の弾。前回 P1-3 と同じ） | `featurize.py`、`features/__init__.py`、`stellar.py`（移植）、ports.py（実態合わせ） | 1〜2日 | encode 前/後の規約曖昧 → 「raw df を受ける」を規約化+テスト | features 指定 config の smoke + config snapshot に FE 名が残ること |
-| P1 BQ JOIN 修正 | `(competition, run_id)` で JOIN | 中（複数コンペ蓄積後の台帳信頼性） | 小〜中（誤った比較で判断を誤るのを防ぐ） | `compare.py:_sql`、（P0-3 の submissions も同キーに） | 0.5日 | cost_estimates に competition が無い場合 → 列追加 or run_id に comp を含める規約 | 2コンペに同名 run_id を作り、compare が混ざらないこと |
-| P1 cache 無効化 | init 時に interim 削除 + ingest で schema hash 照合 | 中（stale cache 事故防止） | 小 | `init_competition.py`、`ingest.py` | 0.5日 | — | interim を意図的に stale にして検知されること |
-| P2 competitions/ escape hatch | 特殊 loader/提出形式だけコンペ別 module | 中（特殊コンペ対応の逃げ道） | ROGII 次第 | 新 `src/competitions/` | 1日/コンペ | generic で済むのに plugin を書き始める → 「configs で表現できない時のみ」を規約化 | generic コンペで src/ 無変更が保たれること |
+| P0-D sample_submission 正本化 | ✅ 2026-07-07 実装済み。提出列名・列順・形式を sample から決め、`submission_contract.json` を残す | 大（提出形式差異を吸収） | **大**（提出形式ミス＝スコア0の防止） | `score.py`、`train.py`、`blend.py`、`package_kernel.py`、`tests/test_submission_contract.py` | 完了 | sample が無いコンペ → 現行 ID+TARGET へフォールバック | 生成 submission の列名・列順・行数が sample と一致するアサート |
+| P1 init 強化 | ✅ 2026-07-07 実装済み。`make init` が runner 用 `configs/<comp>_baseline.yaml` と doc を生成し、次コマンドまで案内 | 大（切替の手作業をほぼ0に） | 中（48h 初動の速度） | `scripts/init_competition.py` | 完了 | 自動推定の誤り → 生成 YAML に `REPLACE_ME` を残し人間確認を強制 | 生成 config に `features: ["base"]` を含める |
+| P1 FE registry | ✅ 2026-07-07 最小導入済み。`features: [base, ...]` で FE を宣言選択 | 大（src/ 共通コードを触らず FE 追加） | 大（sweep の弾） | `featurize.py`、`features/__init__.py`、`tests/test_features_registry.py` | 最小版完了 | encode 前/後の規約曖昧 → 「raw df を受ける」を規約化 | registry の base/unknown feature test |
+| P1 BQ JOIN 修正 | ✅ 2026-07-07 検証・固定済み。`(competition, run_id)` で JOIN | 中（複数コンペ蓄積後の台帳信頼性） | 小〜中（誤った比較で判断を誤るのを防ぐ） | `compare.py:_sql`、`tests/test_submission_contract.py` | 完了 | cost_estimates に competition が無い場合 → 列追加 or run_id に comp を含める規約 | SQL に competition join が入ることをテスト |
+| P1 cache 無効化 | ✅ 2026-07-07 stale 検知を実装済み。interim metadata 不一致で停止 | 中（stale cache 事故防止） | 小 | `ingest.py`、`tests/test_ingest_cache.py` | 完了 | legacy cache は metadata 無しなら警告して使用 | interim metadata mismatch test |
+| P2 competitions/ escape hatch | ✅ 2026-07-07 方針確定済み。特殊 loader/提出形式だけコンペ別 module。ROGII adapter は既存 `src/competitions/rogii.py` を使用 | 中（特殊コンペ対応の逃げ道） | ROGII 次第 | `src/competitions/` | 方針完了 | generic で済むのに adapter を書き始める → 「configs で表現できない時のみ」を規約化 | generic コンペで src/ 無変更が保たれること |
 
 ## 8. 理想のアーキテクチャ案
 
