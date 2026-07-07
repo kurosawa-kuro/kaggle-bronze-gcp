@@ -46,11 +46,39 @@
 
 ## Active
 
-active task は現在 0 件。P0 系列（ROGII 参戦準備、マルチモデル + blend、Vertex full 完走）と複数コンペ切替コスト削減 task は完了し、証跡は `done/` に移動済み。
+active task は現在 0 件。P0 系列（ROGII 参戦準備、マルチモデル + blend、Vertex full 完走）、複数コンペ切替コスト削減、完了タスク監査は完了し、証跡は `done/` と docs 本体に反映済み。
 
 | ファイル | 用途 |
 |---|---|
 | なし | 進行中タスクなし |
+
+## Done Snapshot
+
+直近で完了確認済みの主要 task。
+
+| ファイル | 状態 |
+|---|---|
+| [done/2026-07-06-p0-0-rogii-rules-check.md](done/2026-07-06-p0-0-rogii-rules-check.md) | ROGII ルール・提出制約確認済み |
+| [done/2026-07-06-p0-a-config-single-source.md](done/2026-07-06-p0-a-config-single-source.md) | runner config 単一正本化済み |
+| [done/2026-07-06-p0-1-cv-strategy-config.md](done/2026-07-06-p0-1-cv-strategy-config.md) | CV strategy / GroupKFold 対応済み |
+| [done/2026-07-06-p0-2-package-kernel.md](done/2026-07-06-p0-2-package-kernel.md) | package-kernel 最小経路済み |
+| [done/2026-07-06-p0-3-submissions-ledger.md](done/2026-07-06-p0-3-submissions-ledger.md) | BigQuery 提出台帳済み |
+| [done/2026-07-06-p0-e-rogii-directory-adapter.md](done/2026-07-06-p0-e-rogii-directory-adapter.md) | ROGII directory adapter 済み |
+| [done/2026-07-06-p0-4-multimodel-blend.md](done/2026-07-06-p0-4-multimodel-blend.md) | CatBoost / XGBoost / blend / Vertex full 完走済み |
+| [done/2026-07-06_multi-competition-architecture-review.md](done/2026-07-06_multi-competition-architecture-review.md) | 複数コンペ切替アーキテクチャ再評価、実装済み項目反映済み |
+| [done/2026-07-07_multi-competition-switching-hardening.md](done/2026-07-07_multi-competition-switching-hardening.md) | sample submission 正本化、contract、FE registry、cache stale 検知済み |
+| [done/2026-07-07-refactoring-candidates.md](done/2026-07-07-refactoring-candidates.md) | P0 系列完了時点の cleanup 証跡 |
+
+## Latest Verification
+
+2026-07-07 の完了タスク監査で、壊れた done リンク、古い active 参照、古い LGBM-only 記述、`configs/<comp>/baseline.yaml` 表記揺れを修正済み。
+
+検証:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m unittest discover tests
+# 20 tests OK
+```
 
 完了済みの主要仕様は `docs/01_requirements.md`〜`docs/08_release_runbook.md` と `docs/adr/` に昇格済み。完了 task の証跡は `done/` に置く。
 
